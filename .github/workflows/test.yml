@@ -39,7 +39,9 @@ jobs:
         run: python3 test_wrap_segments.py
 
       - name: Smoke test server
+        timeout-minutes: 15
         run: |
+          set -x
           # --warmup：启动时先阻塞预热构建 worker。
           # worker 为 spawn 模式，需重新导入 build123d 及约 771MB 的 OCCT；
           # 若不预热，这份开销会计入首个请求，并被 60s 看门狗误判为构建超时
@@ -47,26 +49,46 @@ jobs:
           python3 -u tile_generator_v3.py --no-browser --port 8768 --warmup \
             --warmup-timeout 300 > /tmp/server.log 2>&1 &
           SERVER_PID=$!
+          echo "server pid=$SERVER_PID"
 
-          # 等待预热完成并输出服务日志（便于失败时排查）
-          for i in $(seq 1 90); do
-            if grep -q "已启动" /tmp/server.log 2>/dev/null; then break; fi
+          # 等待服务就绪（最多 240s）
+          ready=0
+          for i in $(seq 1 120); do
+            if grep -q "已启动" /tmp/server.log 2>/dev/null; then ready=1; break; fi
+            if ! kill -0 "$SERVER_PID" 2>/dev/null; then
+              echo "::error::服务进程已退出"
+              break
+            fi
             sleep 2
           done
-          cat /tmp/server.log
 
-          curl -sf http://127.0.0.1:8768/api/health
+          echo "=========== server.log ==========="
+          cat /tmp/server.log || true
+          echo "=================================="
+
+          if [ "$ready" != "1" ]; then
+            echo "::error::服务未在 240s 内就绪（ready=$ready）"
+            exit 1
+          fi
+
+          # 健康检查（失败即终止，避免后续出现难懂的 exit 7）
+          if ! curl -sf --max-time 30 http://127.0.0.1:8768/api/health; then
+            echo "::error::健康检查失败"
+            cat /tmp/server.log || true
+            exit 1
+          fi
           echo
 
           echo "冒烟测试 preview2d / preview / generate ..."
           for endpoint in preview2d preview; do
             code=$(curl -s --max-time 180 -X POST "http://127.0.0.1:8768/api/$endpoint" \
               -H 'Content-Type: application/json' -d '{"sides":4,"sideLen":40}' \
-              -o /tmp/resp.json -w '%{http_code}')
+              -o /tmp/resp.json -w '%{http_code}' || echo 000)
             echo "  /api/$endpoint → HTTP $code"
             if [ "$code" != "200" ]; then
               echo "::error::/api/$endpoint 返回 $code"
-              cat /tmp/resp.json
+              cat /tmp/resp.json || true
+              cat /tmp/server.log || true
               kill $SERVER_PID 2>/dev/null || true
               exit 1
             fi
@@ -75,12 +97,13 @@ jobs:
           # STL 导出：确认返回二进制 STL 且体积合理
           code=$(curl -s --max-time 180 -X POST http://127.0.0.1:8768/api/generate \
             -H 'Content-Type: application/json' -d '{"sides":4,"sideLen":40}' \
-            -o /tmp/tile.stl -w '%{http_code}')
+            -o /tmp/tile.stl -w '%{http_code}' || echo 000)
           size=$(wc -c < /tmp/tile.stl | tr -d ' ')
           echo "  /api/generate → HTTP $code, STL ${size} bytes"
           kill $SERVER_PID 2>/dev/null || true
           if [ "$code" != "200" ] || [ "$size" -lt 1000 ]; then
             echo "::error::STL 导出失败（HTTP $code, ${size} bytes）"
+            cat /tmp/server.log || true
             exit 1
           fi
           echo "✅ 冒烟测试全部通过"
