@@ -41,43 +41,46 @@ jobs:
       - name: Smoke test server
         timeout-minutes: 15
         run: |
-          set -x
-          # --warmup：启动时先阻塞预热构建 worker。
-          # worker 为 spawn 模式，需重新导入 build123d 及约 771MB 的 OCCT；
-          # 若不预热，这份开销会计入首个请求，并被 60s 看门狗误判为构建超时
-          # （504），而看门狗重启 worker 后下次又是冷启动，形成死循环。
+          # 服务先启动、预热在后台线程进行，因此端口一定可用。
+          # 预热用于消除构建 worker 的冷启动开销（spawn 需重新导入
+          # build123d 及约 771MB 的 OCCT，否则会计入首个请求并被 60s
+          # 看门狗误判为构建超时）。
           python3 -u tile_generator_v3.py --no-browser --port 8768 --warmup \
-            --warmup-timeout 300 > /tmp/server.log 2>&1 &
+            --warmup-timeout 600 > /tmp/server.log 2>&1 &
           SERVER_PID=$!
           echo "server pid=$SERVER_PID"
 
-          # 等待服务就绪（最多 240s）
+          # 1) 等端口就绪（服务启动很快，与预热无关）
           ready=0
-          for i in $(seq 1 120); do
+          for i in $(seq 1 60); do
             if grep -q "已启动" /tmp/server.log 2>/dev/null; then ready=1; break; fi
             if ! kill -0 "$SERVER_PID" 2>/dev/null; then
-              echo "::error::服务进程已退出"
-              break
+              echo "::error::服务进程已退出"; break
             fi
             sleep 2
           done
-
           echo "=========== server.log ==========="
           cat /tmp/server.log || true
           echo "=================================="
-
           if [ "$ready" != "1" ]; then
-            echo "::error::服务未在 240s 内就绪（ready=$ready）"
-            exit 1
+            echo "::error::服务未在 120s 内就绪"; exit 1
           fi
 
-          # 健康检查（失败即终止，避免后续出现难懂的 exit 7）
+          # 2) 健康检查
           if ! curl -sf --max-time 30 http://127.0.0.1:8768/api/health; then
-            echo "::error::健康检查失败"
-            cat /tmp/server.log || true
-            exit 1
+            echo "::error::健康检查失败"; cat /tmp/server.log || true; exit 1
           fi
           echo
+
+          # 3) 等服务后台预热完成（最多 600s）；未完成也继续，
+          #    仅作提示——接口本身可用即视为通过。
+          for i in $(seq 1 300); do
+            if grep -q "预热完成\|预热未在" /tmp/server.log 2>/dev/null; then break; fi
+            sleep 2
+          done
+          echo "--------- 预热后日志 ---------"
+          cat /tmp/server.log || true
+          echo "------------------------------"
 
           echo "冒烟测试 preview2d / preview / generate ..."
           for endpoint in preview2d preview; do

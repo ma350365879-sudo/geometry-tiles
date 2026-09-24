@@ -2435,20 +2435,26 @@ def run_server(port=8768, no_browser=False, warmup=False, warmup_timeout=300.0):
     if not STEP_FILE.exists():
         print(f"警告：缺少 {STEP_FILE}")
 
+    # 无论是否 --warmup，服务都先启动再预热：预热只在后台线程进行，
+    # 绝不阻塞端口监听。这样即使预热因环境问题变慢或异常，服务本身
+    # 仍可正常响应（页面/接口可用），不会出现"起不来"的情况。
     if warmup:
-        print("正在预热几何构建子进程（首次运行需加载几何内核，请稍候）...")
-        t0 = time.time()
-        if _warmup_workers(warmup_timeout):
-            print(f"预热完成（{time.time() - t0:.1f}s）")
-        else:
-            print(f"警告：预热未在 {warmup_timeout:g}s 内完成，首次请求可能较慢")
-    else:
-        # 后台预热：不阻塞服务启动与页面访问
-        threading.Thread(target=_warmup_workers, daemon=True).start()
+        print("已启用预热：服务启动后将在后台加载几何内核。", flush=True)
 
     server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
-    print(f"几何拼接片 V3 已启动： http://127.0.0.1:{port}")
-    print("按 Ctrl+C 退出")
+    print(f"几何拼接片 V3 已启动： http://127.0.0.1:{port}", flush=True)
+    print("按 Ctrl+C 退出", flush=True)
+
+    def _warmup_bg():
+        t0 = time.time()
+        ok = _warmup_workers(warmup_timeout)
+        if ok:
+            print(f"预热完成（{time.time() - t0:.1f}s）", flush=True)
+        else:
+            print(f"警告：预热未在 {warmup_timeout:g}s 内完成，首次请求可能较慢", flush=True)
+
+    threading.Thread(target=_warmup_bg, daemon=True).start()
+
     if not no_browser:
         threading.Thread(target=lambda: (time.sleep(0.8), webbrowser.open(f"http://127.0.0.1:{port}")), daemon=True).start()
     try:
