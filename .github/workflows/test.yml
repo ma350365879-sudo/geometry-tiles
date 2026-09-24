@@ -1,0 +1,55 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ['3.11']
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Verify STEP asset present
+        run: |
+          test -f 卡扣元件.step || (echo "缺少卡扣元件.step，服务无法启动" && exit 1)
+
+      - name: Run regression tests
+        # 几何布尔运算较慢，且个别用例会触发 60s 看门狗
+        timeout-minutes: 30
+        run: python3 test_wrap_segments.py
+
+      - name: Smoke test server
+        run: |
+          python3 tile_generator_v3.py --no-browser --port 8768 &
+          SERVER_PID=$!
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:8768/api/health > /dev/null; then
+              echo "服务已就绪"
+              break
+            fi
+            sleep 2
+          done
+          curl -sf http://127.0.0.1:8768/api/health
+          curl -sf -X POST http://127.0.0.1:8768/api/preview2d \
+            -H 'Content-Type: application/json' -d '{"sides":4,"sideLen":40}' \
+            -o /dev/null -w "preview2d HTTP %{http_code}\n"
+          kill $SERVER_PID

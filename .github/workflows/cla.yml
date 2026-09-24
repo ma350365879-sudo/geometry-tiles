@@ -1,0 +1,45 @@
+name: CLA Assistant
+
+# 在 Pull Request 上自动要求贡献者签署 CLA。
+# 首次配置需要：
+#   1. 在仓库 Settings → Secrets 中添加 PERSONAL_ACCESS_TOKEN
+#   2. 修改下方 SIGNATURES 文件路径为你自己的 Gist 或仓库内文件
+# 详见 CONTRIBUTING.md 与 CLA.md
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request_target:
+    types: [opened, closed, synchronize]
+
+permissions:
+  actions: write
+  contents: write
+  pull-requests: write
+  statuses: write
+
+jobs:
+  CLAAssistant:
+    runs-on: ubuntu-latest
+    steps:
+      - name: "CLA Assistant"
+        if: (github.event.comment.body == 'recheck' || github.event.comment.body == '我已阅读并同意《贡献者许可协议（CLA）》。') || github.event_name == 'pull_request_target'
+        uses: contributor-assistant/github-action@v2.6.1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # 需要一个有 repo 权限的 PAT，用于写入签署记录
+          PERSONAL_ACCESS_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+        with:
+          # 签署记录的存放位置（Gist：用户名/GistID）
+          path-to-signatures: 'ma350365879-sudo/1f171928be3801dcb142df22751e9f6b/cla.json'
+          # CLA 文档路径（仓库内相对路径即可）
+          path-to-document: 'https://github.com/${{ github.repository }}/blob/main/CLA.md'
+          # 不需要签署的分支
+          branch: 'main'
+          # 已经签署过的贡献者（GitHub ID），逗号分隔
+          allowlist: 'bot*,dependabot[bot]'
+          # PR 中自动回复的提示语
+          custom-pr-sign-comment: '感谢您的贡献！请先阅读并同意《贡献者许可协议（CLA）》，然后在本 PR 中回复：我已阅读并同意《贡献者许可协议（CLA）》。'
+          custom-allsigned-prcomment: '✅ 所有贡献者均已签署 CLA，感谢！'
+          custom-notsigned-prcomment: '感谢您的 Pull Request！本项目需要您先签署 [《贡献者许可协议（CLA）》]($pathToCLADocument) 才能合并。请在下方回复以下内容以完成签署：'
+          lock-pullrequest-aftermerge: false
