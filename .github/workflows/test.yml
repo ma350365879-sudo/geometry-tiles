@@ -40,35 +40,47 @@ jobs:
 
       - name: Smoke test server
         run: |
-          python3 tile_generator_v3.py --no-browser --port 8768 &
+          # --warmup：启动时先阻塞预热构建 worker。
+          # worker 为 spawn 模式，需重新导入 build123d 及约 771MB 的 OCCT；
+          # 若不预热，这份开销会计入首个请求，并被 60s 看门狗误判为构建超时
+          # （504），而看门狗重启 worker 后下次又是冷启动，形成死循环。
+          python3 -u tile_generator_v3.py --no-browser --port 8768 --warmup \
+            --warmup-timeout 300 > /tmp/server.log 2>&1 &
           SERVER_PID=$!
-          for i in $(seq 1 30); do
-            if curl -sf http://127.0.0.1:8768/api/health > /dev/null; then
-              echo "服务已就绪"
-              break
-            fi
+
+          # 等待预热完成并输出服务日志（便于失败时排查）
+          for i in $(seq 1 90); do
+            if grep -q "已启动" /tmp/server.log 2>/dev/null; then break; fi
             sleep 2
           done
-          curl -sf http://127.0.0.1:8768/api/health
+          cat /tmp/server.log
 
-          # 首次请求会触发构建 worker 子进程冷启动（需 import build123d 并
-          # 加载约 280MB 的 OCCT）。CI 共享 vCPU 远慢于开发机，冷启动可能
-          # 超过内置的 60s 看门狗而返回 504，此时看门狗会杀掉并重启 worker。
-          # 因此最多重试 5 次，任一成功即视为通过——本步骤验证的是
-          # "接口可用"，而非 "冷启动速度"。
-          echo "冒烟测试 preview2d（含 worker 冷启动，最多重试 5 次）..."
-          ok=0
-          for attempt in $(seq 1 5); do
-            code=$(curl -s --max-time 180 -X POST http://127.0.0.1:8768/api/preview2d \
+          curl -sf http://127.0.0.1:8768/api/health
+          echo
+
+          echo "冒烟测试 preview2d / preview / generate ..."
+          for endpoint in preview2d preview; do
+            code=$(curl -s --max-time 180 -X POST "http://127.0.0.1:8768/api/$endpoint" \
               -H 'Content-Type: application/json' -d '{"sides":4,"sideLen":40}' \
-              -o /dev/null -w '%{http_code}' || echo 000)
-            echo "  第 $attempt 次: HTTP $code"
-            if [ "$code" = "200" ]; then ok=1; break; fi
-            sleep 5
+              -o /tmp/resp.json -w '%{http_code}')
+            echo "  /api/$endpoint → HTTP $code"
+            if [ "$code" != "200" ]; then
+              echo "::error::/api/$endpoint 返回 $code"
+              cat /tmp/resp.json
+              kill $SERVER_PID 2>/dev/null || true
+              exit 1
+            fi
           done
+
+          # STL 导出：确认返回二进制 STL 且体积合理
+          code=$(curl -s --max-time 180 -X POST http://127.0.0.1:8768/api/generate \
+            -H 'Content-Type: application/json' -d '{"sides":4,"sideLen":40}' \
+            -o /tmp/tile.stl -w '%{http_code}')
+          size=$(wc -c < /tmp/tile.stl | tr -d ' ')
+          echo "  /api/generate → HTTP $code, STL ${size} bytes"
           kill $SERVER_PID 2>/dev/null || true
-          if [ "$ok" != "1" ]; then
-            echo "::error::preview2d 冒烟测试 5 次均未返回 200"
+          if [ "$code" != "200" ] || [ "$size" -lt 1000 ]; then
+            echo "::error::STL 导出失败（HTTP $code, ${size} bytes）"
             exit 1
           fi
-          echo "✅ preview2d 冒烟测试通过"
+          echo "✅ 冒烟测试全部通过"

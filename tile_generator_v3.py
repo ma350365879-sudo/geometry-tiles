@@ -2389,12 +2389,63 @@ class Handler(BaseHTTPRequestHandler):
         self._send_json({"error": "unknown endpoint"}, 404)
 
 
-def run_server(port=8768, no_browser=False):
+def _warmup_workers(timeout_s: float = 300.0) -> bool:
+    """预热构建子进程，使其完成 spawn 与 build123d/OCCT 的加载。
+
+    子进程采用 spawn 模式，需重新导入本模块、build123d 及约 771MB 的
+    OCCT 动态库。若不预热，这份开销会计入**首个**用户请求，而内置的
+    BUILD_TIMEOUT_S（60s）看门狗会把「冷启动 + 构建」一起计时——在较慢
+    的机器上首请求会被误判为超时（504），且看门狗重启子进程后，下一次
+    请求又回到冷启动，形成死循环。
+
+    子进程在完成 import 后进入 q_in.get() 阻塞等待。因此只需等待
+    「子进程存活」再留出一段导入时间即可；这里通过提交一个真实的最小
+    构建任务来确认其已能响应，并临时放宽超时，避免把导入时间算作构建
+    超时。
+
+    返回 True 表示 2d 与 3d worker 均已就绪。
+    """
+    global BUILD_TIMEOUT_S
+    _start_build_workers()
+    ok = True
+    saved_timeout = BUILD_TIMEOUT_S
+    # 预热期间放宽看门狗：此时耗时主要是子进程导入几何内核，而非构建本身。
+    BUILD_TIMEOUT_S = max(saved_timeout, timeout_s)
+    try:
+        for kind, probe in (("2d", ({"sides": 3, "sideLen": MIN_SIDE_MM},)),
+                            ("3d", ("preview", {"sides": 3, "sideLen": MIN_SIDE_MM}))):
+            st = _worker_state.get(kind)
+            if st is None or st.get("proc") is None:
+                ok = False
+                continue
+            try:
+                _submit_build(kind, probe)
+            except Exception as exc:
+                print(f"警告：{kind} worker 预热失败：{exc}")
+                ok = False
+    finally:
+        BUILD_TIMEOUT_S = saved_timeout
+    return ok
+
+
+def run_server(port=8768, no_browser=False, warmup=False, warmup_timeout=300.0):
     import time
     if not HTML_FILE.exists():
         print(f"警告：缺少 {HTML_FILE}")
     if not STEP_FILE.exists():
         print(f"警告：缺少 {STEP_FILE}")
+
+    if warmup:
+        print("正在预热几何构建子进程（首次运行需加载几何内核，请稍候）...")
+        t0 = time.time()
+        if _warmup_workers(warmup_timeout):
+            print(f"预热完成（{time.time() - t0:.1f}s）")
+        else:
+            print(f"警告：预热未在 {warmup_timeout:g}s 内完成，首次请求可能较慢")
+    else:
+        # 后台预热：不阻塞服务启动与页面访问
+        threading.Thread(target=_warmup_workers, daemon=True).start()
+
     server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
     print(f"几何拼接片 V3 已启动： http://127.0.0.1:{port}")
     print("按 Ctrl+C 退出")
@@ -2413,5 +2464,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="几何拼接片 V3 · P0 基准版")
     parser.add_argument("--port", type=int, default=8768)
     parser.add_argument("--no-browser", action="store_true")
+    parser.add_argument("--warmup", action="store_true",
+                        help="启动时阻塞预热几何构建子进程（用于 CI/自动化，避免首请求超时）")
+    parser.add_argument("--warmup-timeout", type=float, default=300.0,
+                        help="预热等待上限（秒），默认 300")
     args = parser.parse_args()
-    run_server(args.port, args.no_browser)
+    run_server(args.port, args.no_browser, args.warmup, args.warmup_timeout)
