@@ -1,0 +1,1432 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>几何拼接片 · 给 3D 打印机的几何拼片工坊</title>
+<style>
+  :root{
+    --bg:#f3f5f9; --panel:#ffffff; --line:#e2e8f1; --line-strong:#c9d4e3;
+    --ink:#1d2b3d; --muted:#67788f; --brand:#2f6fb0; --brand-deep:#26588c; --brand-soft:#e8f1fa;
+    --ok:#2e9b6b; --ok-soft:#e7f6ef; --danger:#d64545; --danger-soft:#fbeaea;
+    --radius-lg:16px; --radius:10px; --radius-sm:8px;
+    --shadow:0 6px 20px rgba(23,42,69,.06);
+    --font:"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:var(--font);background:var(--bg);color:var(--ink);min-height:100vh;font-size:14px}
+  header{background:linear-gradient(120deg,#1e3a5c,#2f6fb0 70%,#3f83c4);color:#fff;padding:16px 24px}
+  header h1{font-size:19px;letter-spacing:.5px}
+  header .sub{display:block;opacity:.88;font-size:12.5px;margin-top:4px}
+  header .sub b{font-weight:600}
+  .layout{max-width:1760px;margin:16px auto;padding:0 16px;display:grid;grid-template-columns:400px minmax(0,1fr) 320px;gap:16px;align-items:start}
+  @media (max-width:1200px){.layout{grid-template-columns:1fr}}
+  .side{display:flex;flex-direction:column;gap:14px}
+  .side-right{position:sticky;top:16px;max-height:calc(100vh - 32px);overflow:auto}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius-lg);padding:16px;box-shadow:var(--shadow)}
+  .panel h2{font-size:13.5px;margin-bottom:12px;display:flex;align-items:center;gap:8px}
+  .panel h2 .step{display:inline-flex;width:20px;height:20px;border-radius:50%;background:var(--brand);color:#fff;font-size:11px;align-items:center;justify-content:center;flex:none}
+  .row{display:grid;grid-template-columns:110px 1fr;gap:10px;align-items:center;margin:9px 0}
+  .row>label{font-size:12.5px;font-weight:600;color:#33455c}
+  input[type=number],select{width:100%;height:34px;border:1px solid var(--line);border-radius:var(--radius-sm);padding:0 8px;font:inherit;font-size:13px;background:#fff}
+  input[type=number]:focus,select:focus,textarea:focus{outline:none;border-color:var(--brand);box-shadow:0 0 0 3px rgba(47,111,176,.12)}
+  .hint{font-size:11.5px;color:var(--muted);line-height:1.6;margin-top:8px}
+  .btn{height:42px;border-radius:var(--radius);border:1px solid var(--line);background:#fff;color:#33455c;font-size:13.5px;font-weight:600;cursor:pointer;transition:.15s}
+  .btn:hover:not(:disabled){border-color:var(--line-strong)}
+  .btn.primary{background:var(--brand);border-color:var(--brand);color:#fff}
+  .btn.primary:hover:not(:disabled){background:var(--brand-deep)}
+  .btn.primary.ok{background:var(--ok);border-color:var(--ok)}
+  .btn:disabled{opacity:.55;cursor:not-allowed}
+
+  /* ---------- 形状卡片 ---------- */
+  .shape-cards{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+  .shape-card{border:1px solid var(--line);border-radius:12px;padding:8px 4px 7px;text-align:center;cursor:pointer;background:#fff;transition:border-color .15s,box-shadow .15s,background .15s}
+  .shape-card:hover{border-color:var(--brand)}
+  .shape-card.active{border-color:var(--brand);background:var(--brand-soft);box-shadow:0 0 0 3px rgba(47,111,176,.12)}
+  .shape-card svg{display:block;margin:0 auto 5px}
+  .shape-card .nm{font-size:11.5px;font-weight:600;color:#33455c;line-height:1.25}
+  .shape-card.active .nm{color:var(--brand-deep)}
+  .variant-row{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+  .variant-chip{border:1px solid var(--line);border-radius:10px;padding:5px 7px 4px;font-size:11px;cursor:pointer;background:#f8fafc;color:#33455c;transition:.12s;display:flex;flex-direction:column;align-items:center;gap:3px;min-width:56px}
+  .variant-chip svg{display:block}
+  .variant-chip:hover{border-color:var(--brand)}
+  .variant-chip.active{background:var(--brand-soft);color:var(--brand-deep);border-color:var(--brand);box-shadow:0 0 0 3px rgba(47,111,176,.12)}
+  .variant-row .lab{width:100%;font-size:11px;color:var(--muted);margin-bottom:-2px}
+
+  /* ---------- 滑轨（大点击区 + 刻度 + 值徽章） ---------- */
+  .slider-field{display:grid;grid-template-columns:84px minmax(0,1fr) 104px;gap:8px;align-items:center;margin:10px 0}
+  .slider-field>.lab{font-size:12px;font-weight:600;color:#33455c;line-height:1.3}
+  .slider-box{display:flex;flex-direction:column;justify-content:center;min-height:40px}
+  input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:26px;background:transparent;cursor:pointer}
+  input[type=range]::-webkit-slider-runnable-track{height:8px;border-radius:999px;background:linear-gradient(to right,var(--brand) var(--p,0%),#dfe6ef var(--p,0%))}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;margin-top:-7px;width:22px;height:22px;border-radius:50%;background:#fff;border:2.5px solid var(--brand);box-shadow:0 1px 4px rgba(23,42,69,.25)}
+  input[type=range]::-moz-range-track{height:8px;border-radius:999px;background:#dfe6ef}
+  input[type=range]::-moz-range-progress{height:8px;border-radius:999px;background:var(--brand)}
+  input[type=range]::-moz-range-thumb{width:22px;height:22px;border-radius:50%;background:#fff;border:2.5px solid var(--brand);box-shadow:0 1px 4px rgba(23,42,69,.25)}
+  .ticks{position:relative;height:13px;margin:0 12px}
+  .ticks i{position:absolute;top:0;width:1px;height:5px;background:var(--line-strong)}
+  .ticks i.hi{width:2px;height:8px;background:var(--brand)}
+  .ticks b{position:absolute;top:9px;font-size:9px;color:#8b99ad;transform:translateX(-50%);font-weight:600;white-space:nowrap}
+  .value-badge{width:100%;height:30px;border:1px solid var(--line);border-radius:var(--radius-sm);text-align:center;font-size:12.5px;font-weight:600;color:var(--brand-deep);background:#f8fafc;padding:0 2px;-moz-appearance:textfield;appearance:textfield}
+  .value-badge::-webkit-outer-spin-button,.value-badge::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+  .toggle-row{display:flex;justify-content:flex-start;align-items:center;gap:10px;margin:10px 0}
+  .toggle-row .lab{font-size:12.5px;font-weight:600;color:#33455c}
+  .switch{position:relative;width:42px;height:24px;cursor:pointer;flex:none}
+  .switch input{position:absolute;opacity:0;width:100%;height:100%;cursor:pointer;z-index:2}
+  .switch .track{position:absolute;inset:0;border-radius:999px;background:#c9d4e3;transition:.18s}
+  .switch .track:after{content:"";position:absolute;top:2px;left:2px;width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.25);transition:.18s}
+  .switch input:checked+.track{background:var(--brand)}
+  .switch input:checked+.track:after{transform:translateX(18px)}
+  .size-info{font-size:12px;color:var(--muted);background:var(--brand-soft);border:1px solid #d4e4f4;border-radius:var(--radius-sm);padding:7px 10px;margin-top:10px}
+  .size-info b{color:var(--brand-deep);font-size:13px}
+
+  /* ---------- 自由模式边卡（紧凑行布局） ---------- */
+  .edge-card{border:1px solid #e8edf4;border-radius:12px;padding:7px 10px;margin-top:7px;background:#fbfcfe}
+  .edge-card .head{display:flex;justify-content:space-between;align-items:center;margin-bottom:2px}
+  .edge-card .head label{font-size:12px;font-weight:700;color:#33455c}
+  .erow{display:grid;grid-template-columns:44px minmax(0,1fr) 104px 36px;gap:7px;align-items:center;margin:6px 0}
+  .erow .elab{font-size:11.5px;font-weight:600;color:#33455c;line-height:1.2}
+  .erow.sub{margin-left:14px;position:relative;background:#f5f9fd;border-radius:8px}
+  .erow.sub::before{content:"";position:absolute;left:-9px;top:0;bottom:0;width:1.5px;background:var(--line-strong)}
+  .erow.sub::after{content:"";position:absolute;left:-9px;top:50%;width:8px;height:1.5px;background:var(--line-strong)}
+  .mini{font-size:11px;border:1px solid var(--line);background:#fff;border-radius:999px;padding:3px 10px;cursor:pointer;color:#33455c}
+  .mini.on{background:var(--brand-soft);border-color:var(--brand);color:var(--brand-deep);font-weight:600}
+  .mini.arcbtn,.mini.dirbtn{width:34px;height:28px;padding:0;border-radius:8px;font-size:12px;line-height:1;flex:none}
+  .mini.dirbtn{font-weight:700}
+  .mini.dirbtn.in{background:var(--brand-soft);border-color:var(--brand);color:var(--brand-deep)}
+  .stepper2{display:grid;grid-template-columns:20px 1fr 20px;gap:3px;align-items:center}
+  .stepper2 button{height:28px;border:1px solid var(--line);border-radius:7px;background:#fff;color:#33455c;font-size:13px;cursor:pointer;line-height:1;padding:0}
+  .stepper2 button:hover{border-color:var(--line-strong)}
+  .stepper2 .value-badge{height:28px;padding:0 1px}
+  .arc-switch{display:grid;grid-template-columns:34px 46px 34px;align-items:center;gap:5px;cursor:pointer;user-select:none;font-size:11px;color:var(--muted)}
+  .arc-switch .track{position:relative;height:22px;border-radius:999px;background:#dbe2ec;border:1px solid #c8d3e0}
+  .arc-switch .knob{position:absolute;top:1px;left:1px;width:20px;height:20px;border-radius:50%;background:#fff;box-shadow:0 1px 4px rgba(0,0,0,.2);transition:.15s;pointer-events:none}
+  .arc-switch.right .knob{transform:translateX(24px)}
+  .arc-switch.right .lab-in{color:var(--brand);font-weight:700}
+  .arc-switch:not(.right) .lab-out{color:var(--brand);font-weight:700}
+  .param-error{display:none;grid-column:1/-1;color:var(--danger);font-size:11px;line-height:1.4;margin-top:4px}
+  .param-error.show{display:block}
+
+  /* ---------- 画布 ---------- */
+  .view{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius-lg);box-shadow:var(--shadow);padding:12px;min-height:680px;display:grid;grid-template-rows:minmax(220px,32%) 1fr;gap:12px;position:sticky;top:16px;max-height:calc(100vh - 32px)}
+  .canvas-wrap{border:1px solid #edf1f6;border-radius:12px;background:#fff;position:relative;overflow:hidden}
+  canvas{width:100%;height:100%;display:block}
+  .legend{position:absolute;left:10px;bottom:10px;font-size:10.5px;background:rgba(255,255,255,.92);padding:5px 9px;border-radius:8px;border:1px solid var(--line);z-index:2;color:#33455c;line-height:1.7;pointer-events:none}
+  .legend .sw{display:inline-block;width:14px;height:3px;border-radius:2px;vertical-align:middle;margin:0 3px 2px 8px}
+  .legend .dot{display:inline-block;width:7px;height:7px;border-radius:50%;vertical-align:middle;margin:0 3px 0 8px}
+  .solution-overlay{position:absolute;top:10px;left:10px;display:flex;gap:6px;flex-wrap:wrap;z-index:3}
+  .solution-btn{border:1px solid var(--line);background:#fff;border-radius:999px;padding:5px 12px;font-size:12px;cursor:pointer;box-shadow:0 1px 3px rgba(23,42,69,.08)}
+  .solution-btn.active{background:var(--brand);border-color:var(--brand);color:#fff}
+  .mate-switch{position:absolute;top:10px;right:10px;z-index:3;display:flex;align-items:center;gap:7px;background:rgba(255,255,255,.94);border:1px solid var(--line);border-radius:999px;padding:5px 12px;font-size:11.5px;color:#33455c;cursor:pointer;user-select:none;box-shadow:0 1px 3px rgba(23,42,69,.08)}
+  .mate-switch input{accent-color:var(--brand);cursor:pointer}
+
+  /* ---------- 四态组件（加载/空态/成功/错误） ---------- */
+  .overlay{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);max-width:84%;padding:12px 18px;border-radius:12px;font-size:13px;line-height:1.6;text-align:center;display:none;pointer-events:none;z-index:4;box-shadow:0 6px 18px rgba(23,42,69,.12)}
+  .overlay.show{display:block}
+  .overlay.info{background:rgba(255,255,255,.96);border:1px solid #cfe0f1;color:#2f6fb0}
+  .overlay.err{background:rgba(255,255,255,.97);border:1px solid #f0b9b9;color:var(--danger)}
+  .spinner{display:inline-block;width:14px;height:14px;border:2px solid #b9d2e8;border-top-color:var(--brand);border-radius:50%;animation:spin .8s linear infinite;vertical-align:-2px;margin-right:7px}
+  @keyframes spin{to{transform:rotate(360deg)}}
+
+  /* ---------- 生成与下载 ---------- */
+  .actions{display:grid;gap:10px}
+  .file-row{margin-top:12px}
+  .file-row>label{font-size:11.5px;color:var(--muted);display:block;margin-bottom:4px}
+  .file-name{font-size:12px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;background:#f8fafc;border:1px dashed var(--line-strong);border-radius:var(--radius-sm);padding:7px 9px;color:#33455c;word-break:break-all;user-select:all}
+  .status-line{font-size:12px;padding:9px 11px;border-radius:var(--radius-sm);background:#f8fafc;border:1px solid var(--line);color:var(--muted);margin-top:12px;line-height:1.6;display:none}
+  .status-line.show{display:block}
+  .status-line.ok{color:var(--ok);background:var(--ok-soft);border-color:#bfe3d2}
+  .status-line.err{color:var(--danger);background:var(--danger-soft);border-color:#efc7c7}
+  .status-line.info{color:var(--brand-deep);background:var(--brand-soft);border-color:#cfe0f1}
+
+  /* ---------- 通俗说明 / 高级 ---------- */
+  .plain-list{margin:2px 0 8px 18px;font-size:12.5px;line-height:1.9;color:#3a4a5f}
+  details.tech{border-top:1px dashed var(--line);padding-top:9px;margin-top:9px}
+  details.tech summary{cursor:pointer;font-size:12px;color:var(--muted);font-weight:600;user-select:none}
+  details.tech summary:hover{color:var(--brand)}
+  details.tech pre{font-size:11px;line-height:1.65;color:#4a5a70;background:#f8fafc;border:1px solid var(--line);border-radius:var(--radius-sm);padding:9px 11px;margin-top:8px;white-space:pre-wrap;word-break:break-all;max-height:280px;overflow:auto}
+  details.adv{border:1px solid var(--line);border-radius:var(--radius);background:#fbfcfe;padding:10px 12px}
+  details.adv summary{cursor:pointer;font-size:12.5px;font-weight:600;color:var(--muted);user-select:none}
+  details.adv summary:hover{color:var(--brand)}
+  .quick-input{width:100%;min-height:64px;border:1px solid var(--line);border-radius:var(--radius-sm);padding:8px;font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;resize:vertical;color:#33455c;margin-top:10px;background:#fff}
+  .quick-row{display:flex;gap:8px;margin-top:8px}
+  .quick-row .btn{flex:1;height:36px;font-size:12.5px}
+  .case-display{font-size:11px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:#5a6b82;background:#f2f5f9;border-radius:var(--radius-sm);padding:7px 9px;margin-top:8px;word-break:break-all;line-height:1.5;min-height:18px}
+</style>
+</head>
+<body>
+<header>
+  <h1>几何拼接片</h1>
+  <span class="sub">给 3D 打印机的几何拼片工坊 · <b>每 40mm 边 1 个卡扣</b>，相同尺寸的片可以互相拼合</span>
+</header>
+
+<div class="layout">
+  <div class="side side-left">
+
+    <div class="panel">
+      <h2><span class="step">1</span>选择形状</h2>
+      <div class="shape-cards" id="shapeCards"></div>
+      <div class="variant-row" id="variantBox"></div>
+    </div>
+
+    <div class="panel">
+      <h2><span class="step">2</span>尺寸与细节</h2>
+      <div class="toggle-row">
+        <span class="switch"><input type="checkbox" id="hollowMode" checked onchange="paramChanged()"><span class="track"></span></span>
+        <span class="lab">镂空（省料更轻）</span>
+      </div>
+      <div id="detailControls"></div>
+    </div>
+  </div>
+
+  <div class="view">
+    <div class="canvas-wrap">
+      <canvas id="cv2d"></canvas>
+      <div id="solutionBox" class="solution-overlay"></div>
+      <div id="cv2dError" class="overlay err"></div>
+      <div class="legend">
+        <span class="sw" style="background:#1f2a3d"></span>轮廓
+        <span class="sw" style="background:#3d7db8"></span>卡扣外沿
+        <span class="sw" style="background:#2e9b6b"></span>镂空内沿
+        <span class="sw" style="background:#d64545"></span>卡扣位置
+      </div>
+    </div>
+    <div class="canvas-wrap">
+      <canvas id="cv3d"></canvas>
+      <label class="mate-switch"><input type="checkbox" id="mateToggle" checked onchange="mateChanged()">两片装配（仅供参考）</label>
+      <div id="cv3dLoading" class="overlay info"><span class="spinner"></span>3D 生成中…</div>
+      <div id="cv3dNotice" class="overlay err"></div>
+    </div>
+  </div>
+
+  <div class="side side-right">
+
+    <div class="panel">
+      <h2><span class="step">3</span>生成与下载</h2>
+      <div class="actions">
+        <button class="btn primary" id="btnDownload" onclick="downloadSTL()" disabled>下载3D模型</button>
+      </div>
+      <div class="size-info" id="sizeInfo" title="按 PETG 密度 1.27 g/cm³、单价 ¥25/kg 估算">成品约 — g · 物料成本约 — 元</div>
+      <div class="file-row">
+        <label>STL 文件将保存为</label>
+        <div class="file-name" id="fileNameBox">—</div>
+      </div>
+      <div id="statusLine" class="status-line"></div>
+    </div>
+
+    <div class="panel">
+      <details class="adv">
+        <summary>高级（开发者）：参数粘贴 / 复制用例</summary>
+        <textarea id="quickParams" class="quick-input" placeholder="粘贴用例，例如：58（凹弧，R40），40，40，40；角107.4°；解2"></textarea>
+        <div class="quick-row">
+          <button class="btn primary" onclick="applyQuickParams()">应用参数</button>
+          <button class="btn" onclick="copyCaseText()">复制当前用例</button>
+        </div>
+        <div class="case-display" id="caseText">—</div>
+      </details>
+    </div>
+  </div>
+</div>
+
+<script type="importmap">
+  {
+    "imports": {
+      "three": "/vendor/three/three.module.js",
+      "three/addons/": "/vendor/three/"
+    }
+  }
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/OrbitControls.js';
+
+window.THREE = THREE;
+window.OrbitControls = OrbitControls;
+</script>
+
+<script>
+const MIN_SIDE = 12, MAX_SIDE = 160, MIN_ANGLE = 15, MAX_ANGLE = 300, ARC_MIN_BASE = 6, MAX_R = 160;
+const UNIT_MIN = 12, UNIT_MAX = 80, UNIT_STD = 40;
+const PETG_DENSITY_GCM3 = 1.27;          // PETG 密度
+const FILAMENT_PRICE_CNY_PER_KG = 25;    // 耗材单价（元/kg）
+const state = {
+  n: 4,
+  regular: false,
+  sideLen: 40,
+  freeLens: [40, 40, 40, 40],
+  freeAngles: [90],
+  freeSolution: 0,
+  errorAnchor: null,
+  arcs: {},
+  skip3D: false,
+  preset: null,     // {shapeId, variantId, units, label}
+  unitSize: 40
+};
+let latestResult = null;
+let last2D = null;
+
+function $(id){ return document.getElementById(id); }
+function clamp(v,min,max){ return Math.min(max, Math.max(min, v)); }
+function regAngle(n){ return Math.round((n - 2) * 180 / n * 10) / 10; }
+function fmt(v){ return String(Number(Number(v).toFixed(3))); }
+
+// ============================================================
+// 预设（翻译层）：配方表 + 配方编译器
+// 所有预设 = 现有引擎参数的"配方"；引擎零改动。
+// ============================================================
+const PRESETS = [
+  { id:'tri', name:'三角形', variants:[
+    {id:'tri-111', label:'等边',        fnLabel:'等边三角形',       units:[1,1,1]},
+    {id:'tri-221', label:'等腰 2,2,1',  fnLabel:'等腰三角形2-2-1',  units:[2,2,1]},
+    {id:'tri-222', label:'大等边 2,2,2', fnLabel:'大等边三角形',     units:[2,2,2]},
+    {id:'tri-333', label:'大等边 3,3,3', fnLabel:'大等边三角形',     units:[3,3,3]},
+    {id:'tri-345', label:'直角 3,4,5',  fnLabel:'直角三角形3-4-5',  units:[3,4,5]},
+    {id:'tri-iso', label:'等腰直角',    fnLabel:'等腰直角三角形',    lens:[40,40,56.57]},
+    {id:'tri-306090', label:'30-60-90', fnLabel:'直角三角形30-60-90', lens:[80,40,69.28]},
+  ]},
+  { id:'quad', name:'四边形', variants:[
+    {id:'sq-1111',   label:'正方形',        fnLabel:'正方形',        units:[1,1,1,1]},
+    {id:'sq-2222',   label:'大正方形', fnLabel:'大正方形', units:[2,2,2,2]},
+    {id:'rect-12',   label:'长方形 1:2',    fnLabel:'长方形1比2',     units:[2,1,2,1]},
+    {id:'diamond-60',label:'菱形 60°',      fnLabel:'菱形60度',       units:[1,1,1,1], corner:[120,60,120,60]},
+    {id:'diamond-gold',label:'黄金菱形',    fnLabel:'黄金菱形',       units:[1,1,1,1], corner:[109.47,70.53,109.47,70.53]},
+    {id:'trap-1121', label:'梯形 1:1:2:1',  fnLabel:'等腰梯形',      units:[2,1,1,1], corner:[60,120,120,60]},
+    {id:'trap-right',label:'直角梯形',      fnLabel:'直角梯形',      lens:[80,56.57,40,40], corner:[45,135,90,90]},
+    {id:'para-60',  label:'平行四边形',     fnLabel:'平行四边形',    units:[2,1,2,1], corner:[120,60,120,60]},
+    {id:'penrose-fat',label:'密铺·彭罗斯胖菱形', fnLabel:'彭罗斯胖菱形',   units:[1,1,1,1], corner:[108,72,108,72]},
+    {id:'penrose-thin',label:'密铺·彭罗斯瘦菱形',fnLabel:'彭罗斯瘦菱形',   units:[1,1,1,1], corner:[144,36,144,36]},
+    {id:'penrose-kite',label:'密铺·彭罗斯盾牌', fnLabel:'彭罗斯盾牌', lens:[64.72,40,40,64.72], corner:[72,144,72,72]},
+    {id:'penrose-dart',label:'密铺·彭罗斯飞镖', fnLabel:'彭罗斯飞镖', lens:[40,64.72,64.72,40], corner:[36,72,36,216]},
+  ]},
+  { id:'penta', name:'五边形', variants:[
+    {id:'p5-1', label:'正五边形',      fnLabel:'正五边形',   units:[1,1,1,1,1]},
+    {id:'p5-2', label:'正五边形 2×5',  fnLabel:'大正五边形', units:[2,2,2,2,2]},
+    {id:'house', label:'房子形',       fnLabel:'房子形',     units:[1,1,1,1,1], corner:[90,150,60,150,90]},
+    {id:'tile-cairo', label:'密铺·开罗五边形', fnLabel:'密铺开罗五边形',
+     lens:[40,54.64,54.64,54.64,54.64], corner:[120,90,120,90,120]},
+  ]},
+  { id:'hexa', name:'六边形', variants:[
+    {id:'p6-1', label:'正六边形',      fnLabel:'正六边形',   units:[1,1,1,1,1,1]},
+    {id:'p6-2', label:'正六边形 2×6',  fnLabel:'大正六边形', units:[2,2,2,2,2,2]},
+    {id:'hex-stretch', label:'拉长六边形', fnLabel:'拉长六边形', units:[1,1,2,1,1,2]},
+  ]},
+  { id:'other', name:'其他多边形', variants:[
+    {id:'p8-1', label:'正八边形', fnLabel:'正八边形', units:[1,1,1,1,1,1,1,1]},
+    {id:'p9-1', label:'正九边形', fnLabel:'正九边形', units:[1,1,1,1,1,1,1,1,1]},
+    {id:'p10-1', label:'正十边形', fnLabel:'正十边形', units:[1,1,1,1,1,1,1,1,1,1]},
+    {id:'p11-1', label:'正十一边形', fnLabel:'正十一边形', units:[1,1,1,1,1,1,1,1,1,1,1]},
+    {id:'p12-1', label:'正十二边形', fnLabel:'正十二边形', units:[1,1,1,1,1,1,1,1,1,1,1,1]},
+    {id:'star-5', label:'五角星', fnLabel:'五角星',
+     units:[1,1,1,1,1,1,1,1,1,1], corner:[252,36,252,36,252,36,252,36,252,36], solution:1},
+    {id:'rot-p5', label:'五边形旋转密铺', fnLabel:'五边形旋转密铺',
+     units:[1,1,1,1,1], corner:[108,108,36,252,36], solution:1},
+    {id:'rot-p7', label:'七边形旋转密铺', fnLabel:'七边形旋转密铺',
+     lens:[40,40,40,40,40,40,40], corner:[128.6,128.6,128.6,25.7,231.4,231.3,25.8]},
+    {id:'crown-p2', label:'皇冠型', fnLabel:'皇冠型',
+     lens:[40,40,104.72,104.72], corner:[252,36,36,36]},
+  ]},
+  { id:'curve', name:'曲边多边形', variants:[
+    {id:'curve-ginkgo', label:'银杏叶密铺', fnLabel:'银杏叶密铺',
+     lens:[56.5,56.5,56.5,56.5], corner:[90,90,90,90],
+     arcs:{0:{radius:40,direction:'in'},1:{radius:40,direction:'in'},
+           2:{radius:40,direction:'out'},3:{radius:40,direction:'out'}}},
+    {id:'curve-ingot', label:'银锭形', fnLabel:'银锭形',
+     lens:[56.5,56.5,56.5,56.5], corner:[90,90,90,90],
+     arcs:{0:{radius:40,direction:'in'},1:{radius:40,direction:'out'},
+           2:{radius:40,direction:'in'},3:{radius:40,direction:'out'}}},
+  ]},
+];
+function lawCos(a,b,c){ // 角（夹在边 b,c 之间，对边 a），余弦定理
+  const v = (b*b + c*c - a*a) / (2*b*c);
+  return Math.round(Math.acos(clamp(v,-1,1)) * 180 / Math.PI * 1000) / 1000;
+}
+function autoCorner(units){
+  const m = units.length;
+  if (m === 3) { const [a,b,c] = units; return [lawCos(c,a,b), lawCos(a,b,c), lawCos(b,c,a)]; }
+  if (m === 4 && units[0]===units[2] && units[1]===units[3]) return [90,90,90,90];
+  return units.map(() => Math.round((m-2)*180/m*1000)/1000);
+}
+function compileRecipe(variant, unitSize){
+  // 固定边长配方（非 40 整数倍，如 30-60-90 / 等腰直角 / 直角梯形）
+  if (variant.lens) {
+    const n = variant.lens.length;
+    const corner = variant.corner || autoCorner(variant.lens);
+    const angles = [];
+    for (let v = 2; v <= n-2; v++) angles.push(corner[v-2]);  // corner[i] = 顶点 i+2 的角
+    return { regular:false, freeSideLengths:variant.lens.slice(), freeAngles:angles,
+             freeSolution: variant.solution || 0, arcs: variant.arcs || {} };
+  }
+  // 1×n 且无 corner 覆盖 → 引擎正多边形模式
+  if (!variant.corner && variant.units.every(u => u === 1)) {
+    return { regular:true, sides:variant.units.length, sideLen:unitSize,
+             freeSolution: variant.solution || 0, arcs: {} };
+  }
+  // 单元边 + 180° 顶点；corner 显式给出各原顶点内角
+  const lens = [];
+  variant.units.forEach(k => { for (let i=0;i<k;i++) lens.push(unitSize); });
+  const n = lens.length;
+  const corner = variant.corner || autoCorner(variant.units);
+  const S = []; let acc = 0;
+  variant.units.forEach(k => { acc += k; S.push(acc); });
+  const angles = [];
+  for (let v = 2; v <= n-2; v++) {           // 自由角槽位 = 顶点 2..n-2
+    let t = -1;
+    for (let j = 0; j < S.length-1; j++) if (S[j] === v-1) t = j;
+    angles.push(t >= 0 ? corner[t] : 180);
+  }
+  return { regular:false, freeSideLengths:lens, freeAngles:angles,
+           freeSolution: variant.solution || 0, arcs: variant.arcs || {} };
+}
+function applyPresetParams(){
+  const u = state.unitSize;
+  const c = compileRecipe(state.preset.variant, u);
+  state.arcs = c.arcs || {};
+  state.errorAnchor = null;
+  if (c.regular) {
+    state.regular = true;
+    state.n = c.sides;
+    state.sideLen = c.sideLen;
+  } else {
+    state.regular = false;
+    state.n = c.freeSideLengths.length;
+    state.freeLens = c.freeSideLengths;
+    state.freeAngles = c.freeAngles;
+  }
+  state.freeSolution = c.freeSolution || 0;
+}
+function selectPreset(shapeId, variantId){
+  const p = PRESETS.find(x => x.id === shapeId);
+  if (!p) return;
+  const v = p.variants.find(x => x.id === variantId) || p.variants[0];
+  state.preset = { shapeId, variantId:v.id, variant:v, label:v.fnLabel };
+  applyPresetParams();
+  renderAll(); schedulePreview();
+}
+function selectVariant(variantId){
+  if (!state.preset) return;
+  selectPreset(state.preset.shapeId, variantId);
+}
+function setUnitSize(v){
+  const val = clamp(parseFloat(v) || UNIT_STD, UNIT_MIN, UNIT_MAX);
+  state.unitSize = val;
+  if (state.preset) applyPresetParams();
+  else if (state.regular) state.sideLen = val;
+  // 就地同步输入，不重建 DOM（避免打断拖拽）
+  const r=$('unitRange'); if(r){ r.value=val; paintRangeFill(r); }
+  const n=$('unitNum'); if(n) n.value=val;
+  const sl=$('sideLenRange'); if(sl){ sl.value=val; paintRangeFill(sl); }
+  const sn=$('sideLenNum'); if(sn) sn.value=val;
+  schedulePreview();
+}
+function leavePresetToFree(){
+  // 预设形状上做"改某条边/弧/角"等细节编辑 → 转自由多边形
+  if (state.regular) {
+    state.regular = false;
+    state.freeLens = Array(state.n).fill(state.sideLen);
+    state.freeAngles = [];
+    for (let i=0;i<state.n-3;i++) state.freeAngles.push(regAngle(state.n));
+  }
+  state.preset = null;
+}
+function leaveRegularToFree(){
+  // 快速参数粘贴的正多边形：改边/角/弧 → 转自由多边形
+  state.regular = false;
+  state.freeLens = Array(state.n).fill(state.sideLen);
+  state.freeAngles = [];
+  for (let i=0;i<state.n-3;i++) state.freeAngles.push(regAngle(state.n));
+}
+
+// ============================================================
+// 形状卡片 / 变体 / 细节面板
+// ============================================================
+function outlineFromUnits(units, corner){
+  const m = units.length;
+  corner = corner || autoCorner(units);
+  let x=0, y=0, dir=0;
+  const pts = [[0,0]];
+  for (let s=0; s<m; s++) {
+    for (let k=0; k<units[s]; k++) {
+      const rad = dir*Math.PI/180;
+      x += Math.cos(rad); y += Math.sin(rad); pts.push([x,y]);
+    }
+    if (s < m-1) dir += 180 - corner[s];
+  }
+  return pts;
+}
+function outlineFromLens(lens, corner){
+  const m = lens.length;
+  corner = corner || autoCorner(lens);
+  let x=0, y=0, dir=0;
+  const pts = [[0,0]];
+  for (let s=0; s<m; s++) {
+    const rad = dir*Math.PI/180;
+    x += Math.cos(rad)*lens[s]; y += Math.sin(rad)*lens[s]; pts.push([x,y]);
+    if (s < m-1) dir += 180 - corner[s];
+  }
+  return pts;
+}
+function outlineWithArcs(lens, corner, arcs){
+  // 含弧边：弧段用二次贝塞尔近似采样（缩略图用）
+  const m = lens.length;
+  corner = corner || autoCorner(lens);
+  let x=0, y=0, dir=0;
+  const pts = [[0,0]];
+  const SEG = 10;
+  for (let s=0; s<m; s++) {
+    const L = lens[s];
+    const arc = arcs[s];
+    const rad = dir*Math.PI/180;
+    const ex = x + Math.cos(rad)*L, ey = y + Math.sin(rad)*L;
+    if (arc) {
+      const r = arc.radius;
+      const h = Math.sqrt(Math.max(0, r*r - (L/2)*(L/2)));
+      const sag = r - h;
+      const sign = arc.direction === 'in' ? -1 : 1;
+      const nx = -Math.sin(rad), ny = Math.cos(rad);
+      const mx = (x+ex)/2 + nx*sign*sag, my = (y+ey)/2 + ny*sign*sag;
+      for (let k=1; k<=SEG; k++) {
+        const t = k/SEG;
+        pts.push([(1-t)*(1-t)*x + 2*(1-t)*t*mx + t*t*ex,
+                  (1-t)*(1-t)*y + 2*(1-t)*t*my + t*t*ey]);
+      }
+    } else {
+      pts.push([ex, ey]);
+    }
+    x = ex; y = ey;
+    if (s < m-1) dir += 180 - corner[s];
+  }
+  return pts;
+}
+function thumbSVG(variant, fill){
+  const pts = variant.arcs ? outlineWithArcs(variant.lens, variant.corner, variant.arcs)
+         : variant.lens ? outlineFromLens(variant.lens, variant.corner)
+         : outlineFromUnits(variant.units, variant.corner);
+  let minX=1e9,maxX=-1e9,minY=1e9,maxY=-1e9;
+  pts.forEach(([x,y])=>{ minX=Math.min(minX,x);maxX=Math.max(maxX,x);minY=Math.min(minY,y);maxY=Math.max(maxY,y); });
+  const span = Math.max(maxX-minX, maxY-minY, 1);
+  const S = 88/span;
+  const X = x => 50 + (x-(minX+maxX)/2)*S;
+  const Y = y => 50 - (y-(minY+maxY)/2)*S;
+  const d = pts.map((p,i)=> (i?'L':'M')+X(p[0]).toFixed(1)+' '+Y(p[1]).toFixed(1)).join('')+' Z';
+  return `<svg width="40" height="40" viewBox="0 0 100 100"><path d="${d}" fill="${fill}" stroke="#2f6fb0" stroke-width="5" stroke-linejoin="round"/></svg>`;
+}
+function thumbFreeSVG(){
+  return `<svg width="40" height="40" viewBox="0 0 100 100"><path d="M20 78 L52 14 L86 42 L81 84 L35 92 Z" fill="#eef3f9" stroke="#2f6fb0" stroke-width="5" stroke-linejoin="round"/></svg>`;
+}
+function renderShapeCards(){
+  const box = $('shapeCards');
+  box.innerHTML = PRESETS.map(p => {
+    const active = state.preset ? state.preset.shapeId === p.id : false;
+    const svg = p.id === 'other' ? thumbFreeSVG() : thumbSVG(p.variants[0], active ? '#dcebfb' : '#eef3f9');
+    return `<div class="shape-card${active?' active':''}" onclick="selectPreset('${p.id}','${p.variants[0] ? p.variants[0].id : ''}')">${svg}<div class="nm">${p.name}</div></div>`;
+  }).join('');
+}
+function renderVariantBox(){
+  const box = $('variantBox');
+  if (!state.preset) { box.innerHTML = ''; return; }
+  const p = PRESETS.find(x => x.id === state.preset.shapeId);
+  if (!p || p.variants.length <= 1) { box.innerHTML = ''; return; }
+  box.innerHTML = '<span class="lab">变体（点击选择）</span>' + p.variants.map(v =>
+    `<button class="variant-chip${v.id===state.preset.variantId?' active':''}" onclick="selectVariant('${v.id}')">
+       ${thumbSVG(v, v.id===state.preset.variantId ? '#dcebfb' : '#f8fafc')}<span>${v.label}</span></button>`
+  ).join('');
+}
+
+// ---------- 滑轨刻度 ----------
+function renderTicks(container, min, max, ticks, hiVal, hiLabel){
+  container.innerHTML = '';
+  ticks.forEach(v => {
+    const pct = (v-min)/(max-min)*100;
+    const el = document.createElement('i');
+    el.style.left = pct.toFixed(2) + '%';
+    if (v === hiVal) el.classList.add('hi');
+    container.appendChild(el);
+    if (v === hiVal && hiLabel) {
+      const b = document.createElement('b');
+      b.textContent = hiLabel;
+      b.style.left = pct.toFixed(2) + '%';
+      container.appendChild(b);
+    }
+  });
+}
+function lengthTicks(min,max){ const t=[]; for(let v=Math.ceil(min/20)*20; v<=max; v+=20) t.push(v); return t; }
+function angleTicks(){ const t=[]; for(let v=30; v<=300; v+=15) t.push(v); return t; }
+function rTicks(min,max){
+  const span = max-min;
+  const step = span >= 120 ? 40 : span >= 60 ? 20 : 10;
+  const t=[]; for(let v=Math.ceil(min/step)*step; v<=max; v+=step) t.push(v); return t;
+}
+function paintRangeFill(input){
+  // 已填充进度（WebKit 轨道，用 CSS 变量）
+  const min=parseFloat(input.min), max=parseFloat(input.max), v=parseFloat(input.value);
+  const pct=(v-min)/(max-min)*100;
+  input.style.setProperty('--p', pct + '%');
+}
+function sliderHTML(id, min, max, step, value, oninput, ticks, hiVal, hiLabel, onchange){
+  return `<div class="slider-box">
+    <input type="range" id="${id}" min="${min}" max="${max}" step="${step}" value="${value}" oninput="${oninput}"${onchange ? ` onchange="${onchange}"` : ''}>
+    <div class="ticks" id="${id}-ticks"></div>
+  </div>`;
+}
+
+// ---------- 细节面板 ----------
+function edgeCardsHTML(lens, angles, arcs){
+  let html = '<div class="edge-card">';
+  for (let i = 0; i < lens.length; i++) {
+    const arc = arcs[i];
+    const len = lens[i];
+    html += `<div class="erow">
+        <span class="elab">边 ${i+1}</span>
+        ${sliderHTML('flr-'+i, MIN_SIDE, MAX_SIDE, 0.5, len, `setLen(${i}, this.value)`, lengthTicks(MIN_SIDE,MAX_SIDE), UNIT_STD, '标准')}
+        <div class="stepper2">
+          <button onclick="stepLen(${i}, -0.5)" title="−0.5">−</button>
+          <input type="number" class="value-badge" id="fln-${i}" min="${MIN_SIDE}" max="${MAX_SIDE}" step="0.1" value="${len}" onchange="setLenNum(${i}, this.value)">
+          <button onclick="stepLen(${i}, 0.5)" title="+0.5">+</button>
+        </div>
+        <button class="mini arcbtn${arc?' on':''}" onclick="toggleArc(${i})" title="${arc?'恢复直线':'改为弧线'}">${arc?'↩':'⌒'}</button>
+      </div>`;
+    if (arc) {
+      const minR = Math.max(ARC_MIN_BASE, len / 2);
+      html += `<div class="erow sub">
+        <span class="elab">R</span>
+        ${sliderHTML('far-'+i, minR, MAX_R, 0.5, arc.radius, `setArcR(${i}, this.value)`, rTicks(minR,MAX_R), -1, '')}
+        <div class="stepper2">
+          <button onclick="stepArcR(${i}, -0.5)" title="−0.5">−</button>
+          <input type="number" class="value-badge" id="fan-${i}" min="${minR}" max="${MAX_R}" step="0.1" value="${arc.radius}" onchange="setArcRNum(${i}, this.value)">
+          <button onclick="stepArcR(${i}, 0.5)" title="+0.5">+</button>
+        </div>
+        <button class="mini dirbtn${arc.direction==='in'?' in':''}" onclick="toggleArcDir(${i})" title="弧线方向：点击切换凸/凹">${arc.direction==='in'?'凹':'凸'}</button>
+      </div>`;
+    }
+    html += `<div class="param-error" id="err-edge-${i}"></div>`;
+  }
+  html += '</div>';
+  if (lens.length >= 4) {
+    html += '<div class="edge-card">';
+    for (let i = 0; i < lens.length - 3; i++) {
+      const av = angles[i];
+      html += `<div class="erow"><span class="elab">角 ${i+2}</span>
+        ${sliderHTML('ang-r-'+i, MIN_ANGLE, MAX_ANGLE, 0.1, av, `setAngle(${i}, this.value)`, angleTicks(), 90, '')}
+        <div class="stepper2">
+          <button onclick="stepAngle(${i}, -0.5)" title="−0.5">−</button>
+          <input type="number" class="value-badge" id="ang-n-${i}" min="${MIN_ANGLE}" max="${MAX_ANGLE}" step="0.1" value="${av}" onchange="setAngleNum(${i}, this.value)">
+          <button onclick="stepAngle(${i}, 0.5)" title="+0.5">+</button>
+        </div>
+        <span></span>
+      </div><div class="param-error" id="err-angle-${i}"></div>`;
+    }
+    html += `<div class="hint">共 ${lens.length} 个角，这里可调 ${lens.length-3} 个，其余由闭合求解自动计算。</div></div>`;
+  }
+  return html;
+}
+function paintEdgeCards(lens, angles, arcs){
+  for (let i = 0; i < lens.length; i++) {
+    const r = $('flr-'+i); if (r) { paintRangeFill(r); renderTicks($('flr-'+i+'-ticks'), MIN_SIDE, MAX_SIDE, lengthTicks(MIN_SIDE,MAX_SIDE), UNIT_STD, '标准'); }
+    const a = $('far-'+i);
+    if (a) { paintRangeFill(a); const minR=parseFloat(a.min); renderTicks($('far-'+i+'-ticks'), minR, MAX_R, rTicks(minR,MAX_R), -1, ''); }
+  }
+  for (let i = 0; i < lens.length - 3; i++) {
+    const a = $('ang-r-'+i); if (a) { paintRangeFill(a); renderTicks($('ang-r-'+i+'-ticks'), MIN_ANGLE, MAX_ANGLE, angleTicks(), 90, ''); }
+  }
+}
+function renderDetailControls(){
+  const box = $('detailControls');
+  if (state.preset) {
+    // 预设：直接展开每条边/可调角滑轨（微调即转自由多边形）；无单元尺寸滑轨
+    const viewLens = state.regular ? Array(state.n).fill(state.sideLen) : state.freeLens;
+    const viewAngles = state.regular
+      ? (() => { const a = []; for (let i = 0; i < state.n - 3; i++) a.push(regAngle(state.n)); return a; })()
+      : state.freeAngles;
+    const viewArcs = state.regular ? {} : state.arcs;
+    const html = edgeCardsHTML(viewLens, viewAngles, viewArcs);
+    box.innerHTML = html;
+    paintEdgeCards(viewLens, viewAngles, viewArcs);
+  } else if (state.regular) {
+    // 快速参数粘贴出的正多边形：展开每条边（无独立边长滑轨，改边即转自由）
+    const lens = Array(state.n).fill(state.sideLen);
+    const angles = [];
+    for (let i = 0; i < state.n - 3; i++) angles.push(regAngle(state.n));
+    box.innerHTML = `<div class="hint" style="margin-top:0">正 ${state.n} 边形 · 边长 ${fmt(state.sideLen)} mm · 每条边中间 1 个卡扣（改任一边即转自由多边形）</div>`
+      + edgeCardsHTML(lens, angles, {});
+    paintEdgeCards(lens, angles, {});
+  } else {
+    // 自由多边形：边数滑轨 + 每边编辑 + 可调角
+    let html =
+      `<div class="slider-field"><span class="lab">边数</span>
+        ${sliderHTML('sideCount', 3, 12, 1, state.n, 'sideCountLive(this.value)', [3,4,5,6,7,8,9,10,11,12], 4, '', 'sideCountChanged(this.value)')}
+        <div class="stepper2">
+          <button onclick="stepSideCount(-1)" title="−1">−</button>
+          <input type="number" class="value-badge" id="sideCountNum" min="3" max="12" step="1" value="${state.n}" onchange="sideCountNumChanged(this.value)">
+          <button onclick="stepSideCount(1)" title="+1">+</button>
+        </div>
+      </div>`;
+    html += edgeCardsHTML(state.freeLens, state.freeAngles, state.arcs);
+    box.innerHTML = html;
+    paintEdgeCards(state.freeLens, state.freeAngles, state.arcs);
+    const sc = $('sideCount'); if (sc) { paintRangeFill(sc); renderTicks($('sideCount-ticks'), 3, 12, [3,4,5,6,7,8,9,10,11,12], 4, ''); }
+  }
+}
+function syncRangeFill(id){ const el = $(id); if (el) paintRangeFill(el); }
+
+function renderAll(){
+  renderShapeCards();
+  renderVariantBox();
+  renderDetailControls();
+  updateFileName();
+}
+
+// ============================================================
+// 参数编辑（自由模式）
+// ============================================================
+function sideCountLive(v){
+  const n = clamp(parseInt(v,10),3,12);
+  const nn=$('sideCountNum'); if(nn) nn.value=n;
+  paintRangeFill($('sideCount'));
+}
+function sideCountChanged(v){
+  const n = clamp(parseInt(v,10),3,12);
+  if (n === state.n) return;
+  state.n = n;
+  state.freeLens = Array(n).fill(state.unitSize || 40);
+  state.freeAngles = [];
+  for (let i = 0; i < n - 3; i++) state.freeAngles.push(regAngle(n));
+  state.freeSolution = 0;
+  state.arcs = {};
+  state.errorAnchor = null;
+  renderAll(); schedulePreview();
+}
+function sideCountNumChanged(v){
+  const n = clamp(parseInt(v,10)||3, 3, 12);
+  $('sideCount').value = n;
+  sideCountChanged(n);
+}
+function sideLenChanged(v){
+  state.sideLen = clamp(parseFloat(v) || 40, MIN_SIDE, MAX_SIDE);
+  const n = $('sideLenNum'); if (n) n.value = state.sideLen;
+  syncRangeFill('sideLenRange');
+  schedulePreview();
+}
+function sideLenNumChanged(v){ state.sideLen = clamp(parseFloat(v)||40, MIN_SIDE, MAX_SIDE); const r=$('sideLenRange'); if(r){r.value=state.sideLen; syncRangeFill(r);} schedulePreview(); }
+function arcMinR(i){ const len = state.regular ? state.sideLen : state.freeLens[i]; return Math.max(ARC_MIN_BASE, len / 2); }
+function toggleArc(i){
+  state.errorAnchor = 'err-edge-' + i;
+  if (state.preset) { leavePresetToFree(); renderAll(); }
+  else if (state.regular) { leaveRegularToFree(); renderAll(); }
+  if (state.arcs[i]) delete state.arcs[i];
+  else state.arcs[i] = { radius: Math.max(40, arcMinR(i)), direction: 'out' };
+  renderAll(); schedulePreview();
+}
+function toggleArcDir(i){
+  state.errorAnchor = 'err-edge-' + i;
+  if (state.arcs[i]) state.arcs[i].direction = state.arcs[i].direction === 'out' ? 'in' : 'out';
+  renderAll(); schedulePreview();
+}
+function stepLen(i, d){ setLen(i, state.freeLens[i] + d); }
+function stepAngle(i, d){ setAngle(i, state.freeAngles[i] + d); }
+function stepArcR(i, d){ if (state.arcs[i]) setArcR(i, state.arcs[i].radius + d); }
+function stepUnit(d){ setUnitSize(state.unitSize + d); }
+function stepSideLen(d){
+  state.sideLen = clamp(Math.round((state.sideLen + d) * 10) / 10, MIN_SIDE, MAX_SIDE);
+  const r = $('sideLenRange'); if (r) { r.value = state.sideLen; syncRangeFill(r); }
+  const n = $('sideLenNum'); if (n) n.value = state.sideLen;
+  schedulePreview();
+}
+function stepSideCount(d){
+  const n = clamp(parseInt($('sideCountNum').value || state.n, 10) + d, 3, 12);
+  if (n === state.n) return;
+  $('sideCount').value = n;
+  sideCountChanged(n);
+}
+function setLen(i, v){
+  state.errorAnchor = 'err-edge-' + i;
+  if (state.preset) { leavePresetToFree(); renderAll(); }
+  else if (state.regular) { leaveRegularToFree(); renderAll(); }
+  const val = clamp(parseFloat(v) || 40, MIN_SIDE, MAX_SIDE);
+  state.freeLens[i] = val;
+  if (state.arcs[i] && state.arcs[i].radius < arcMinR(i)) state.arcs[i].radius = arcMinR(i);
+  const n = $('fln-'+i); if (n) n.value = Math.round(val*10)/10;
+  const r = $('flr-'+i); if (r) { r.value = val; paintRangeFill(r); }
+  // 边长变化 → 弧半径下限变化，就地同步 R 滑轨
+  if (state.arcs[i]) {
+    const minR = arcMinR(i);
+    const a = $('far-'+i), an = $('fan-'+i);
+    if (a) { a.min = minR; a.value = state.arcs[i].radius; paintRangeFill(a);
+             renderTicks($('far-'+i+'-ticks'), minR, MAX_R, rTicks(minR, MAX_R), -1, ''); }
+    if (an) { an.min = minR; an.value = Math.round(state.arcs[i].radius*10)/10; }
+  }
+  schedulePreview();
+}
+function setLenNum(i, v){ setLen(i, v); }
+function setAngle(i, v){
+  state.errorAnchor = 'err-angle-' + i;
+  if (state.preset) { leavePresetToFree(); renderAll(); }
+  else if (state.regular) { leaveRegularToFree(); renderAll(); }
+  const val = clamp(parseFloat(v) || 15, MIN_ANGLE, MAX_ANGLE);
+  state.freeAngles[i] = val;
+  const n = $('ang-n-'+i); if (n) n.value = Math.round(val*10)/10;
+  const r = $('ang-r-'+i); if (r) { r.value = val; paintRangeFill(r); }
+  schedulePreview();
+}
+function setAngleNum(i, v){ setAngle(i, v); }
+function setArcR(i, v){
+  state.errorAnchor = 'err-edge-' + i;
+  const val = clamp(parseFloat(v) || arcMinR(i), arcMinR(i), MAX_R);
+  state.arcs[i].radius = val;
+  const n = $('fan-'+i); if (n) n.value = Math.round(val*10)/10;
+  const r = $('far-'+i); if (r) { r.value = val; paintRangeFill(r); }
+  schedulePreview();
+}
+function setArcRNum(i, v){ setArcR(i, v); }
+function paramChanged(){ schedulePreview(); }
+
+// ============================================================
+// 文件名（与后端一致：前端翻译层生成，随请求传给后端）
+// ============================================================
+function shapeKindName(n){
+  if (n === 3) return '三角形';
+  if (n === 4) return '四边形';
+  return n + '边形';
+}
+function buildStlName(){
+  const h = $('hollowMode').checked ? '镂空' : '实心';
+  if (state.preset) {
+    const v = state.preset.variant;
+    // 文件名尺寸 = 变体最大边长（大正方形 80、梯形下底 80、直角梯形 80…）
+    const size = v.lens ? Math.max(...v.lens) : Math.max(...v.units) * state.unitSize;
+    return `${state.preset.label}_${fmt(size)}_${h}.stl`;
+  }
+  if (state.regular) return `正${state.n}边形_边长${fmt(state.sideLen)}_${h}.stl`;
+  // 自由多边形：形状名_各边长_角_弧_解_镂空
+  const lens = state.freeLens.map(fmt);
+  const isRegular = state.freeLens.every(L => Math.abs(L - state.freeLens[0]) < 1e-9)
+    && Object.keys(state.arcs).length === 0 && state.freeSolution === 0
+    && state.freeAngles.every(a => Math.abs(a - regAngle(state.n)) < 1e-6);
+  let prefix;
+  if (isRegular) {
+    prefix = state.n === 3 ? '等边三角形' : state.n === 4 ? '正方形' : `正${state.n}边形`;
+  } else {
+    prefix = shapeKindName(state.n);
+  }
+  const ang = state.freeAngles.length ? '_角' + state.freeAngles.map(fmt).join('_') : '';
+  const arcIds = Object.keys(state.arcs).map(Number).sort((a,b)=>a-b);
+  const arcSeg = arcIds.map(i => {
+    const a = state.arcs[i];
+    return `边${i+1}${a.direction === 'in' ? '凹' : '凸'}弧R${fmt(a.radius)}`;
+  }).join('_');
+  const sol = state.freeSolution > 0 ? `_解${state.freeSolution+1}` : '';
+  return `${prefix}_${lens.join('_')}${ang}${arcSeg?'_'+arcSeg:''}${sol}_${h}.stl`;
+}
+function midTrunc(s, max){
+  if (s.length <= max) return s;
+  const half = Math.floor((max-1)/2);
+  return s.slice(0, half) + '…' + s.slice(-(max-1-half));
+}
+function updateFileName(){
+  const el = $('fileNameBox');
+  const name = buildStlName();
+  el.textContent = midTrunc(name, 46);
+  el.title = name;
+}
+function expandedUnitParams(){
+  // 40mm 整数倍边长自动拆成 40mm 单元边（每单元 1 卡扣）：
+  // 直线边仅当 L≈40k（k≥2，容差 0.5mm）时拆 k 条；弧边不拆；
+  // 非整数倍（如 69.28、49）保持 1 卡扣，不破坏 40mm 标准单元体系。
+  // 拆分点放 180° 平角槽位；原闭合顶点（首/末两个）用 2D 预览返回的
+  // 实际内角（last2D.meta.interiorAngles），无数据时保持不拆尾部避免变形。
+  const lens = state.freeLens;
+  const n = lens.length;
+  if (n < 3) return null;
+  const haveAngles = !!(last2D && last2D.meta && Array.isArray(last2D.meta.interiorAngles)
+                        && last2D.meta.interiorAngles.length === n);
+  const k = lens.map((L, i) => {
+    if (state.arcs[i]) return 1;
+    if (!haveAngles && (i === n-2 || i === n-1)) return 1;
+    const m = Math.round(L / 40);
+    if (m >= 2 && Math.abs(L - m * 40) < 0.5) return m;
+    return 1;
+  });
+  if (k.every(x => x === 1)) return null;
+  const newLens = [];
+  for (let i = 0; i < n; i++) {
+    const seg = lens[i] / k[i];
+    for (let j = 0; j < k[i]; j++) newLens.push(Math.round(seg * 100) / 100);
+  }
+  const prefix = [0];
+  for (let i = 0; i < n; i++) prefix.push(prefix[i] + k[i]);
+  const n2 = newLens.length;
+  const angles2 = [];
+  for (let q = 1; q <= n2 - 3; q++) {
+    let a = 180; // 拆分点默认平角
+    for (let i = 0; i < n; i++) {
+      if (prefix[i] === q) {
+        if (i === 0 || i === n-2 || i === n-1) {
+          a = haveAngles ? last2D.meta.interiorAngles[i] : 180;
+        } else {
+          a = state.freeAngles[i-1];
+        }
+        break;
+      }
+    }
+    angles2.push(a);
+  }
+  const arcs2 = {};
+  Object.keys(state.arcs).forEach(si => { arcs2[String(prefix[Number(si)])] = state.arcs[si]; });
+  return { lens: newLens, angles: angles2, arcs: arcs2 };
+}
+function currentParams(){
+  const base = { hollow: $('hollowMode').checked, stlName: buildStlName() };
+  if (state.regular) {
+    base.sides = state.n;
+    base.sideLen = state.sideLen;
+    base.freeSolution = state.freeSolution;
+  } else {
+    const ex = expandedUnitParams();
+    base.freeSideLengths = ex ? ex.lens : state.freeLens.slice();
+    base.freeAngles = ex ? ex.angles : state.freeAngles.slice();
+    base.freeSolution = state.freeSolution;
+    base.freeArcs = {};
+    const arcsSrc = ex ? ex.arcs : state.arcs;
+    Object.keys(arcsSrc).forEach(k => { base.freeArcs[k] = arcsSrc[k]; });
+  }
+  return base;
+}
+
+// ============================================================
+// 预览调度与请求
+// ============================================================
+let timer2d = null;
+let timer3d = null;
+let previewSeq = 0;
+
+function schedulePreview(){
+  clearTimeout(timer2d);
+  clearTimeout(timer3d);
+  updateFileName();
+  maskCostInfo();   // 参数一变立即遮蔽旧物料估算，直到新 3D 构建完成
+  timer2d = setTimeout(() => send2DPreview(), 30);
+  timer3d = setTimeout(() => send3DPreview(), 1000);
+}
+
+async function send2DPreview(){
+  hide2DCenterError();
+  try {
+    const resp = await fetch('/api/preview2d', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(currentParams())
+    });
+    const data = await resp.json();
+    if (resp.ok === false) throw new Error(data.error || ('HTTP ' + resp.status));
+    last2D = data;
+    draw2D(data);
+    state.freeSolution = data.solutionIndex || 0;
+    const caseEl = $('caseText');
+    if (caseEl) caseEl.textContent = data.caseText || '';
+    renderSolutionButtons(data.solutionCount || 1, state.freeSolution);
+    const msgs = [];
+    if (data.referenceErrors && data.referenceErrors.length) msgs.push('参考线：' + data.referenceErrors.join('；'));
+    if (data.p1CornerWarnings && data.p1CornerWarnings.length) msgs.push(data.p1CornerWarnings.join('；'));
+    if (data.clipOverhangWarnings && data.clipOverhangWarnings.length) msgs.push(data.clipOverhangWarnings.join('；'));
+    if (msgs.length) { show2DCenterError(msgs.join('　')); } else { hide2DCenterError(); }
+    // 2D 检查发现"卡扣超出边框"等无法生成的情况：取消排队的 3D 渲染。
+    const fatal = (data.clipOverhangWarnings && data.clipOverhangWarnings.length) > 0;
+    state.skip3D = fatal;
+    if (fatal) {
+      clearTimeout(timer3d);
+      latestResult = null;
+      updateCostInfo(0);
+      if (scene && meshGroup) {
+        while (meshGroup.children.length) meshGroup.remove(meshGroup.children[0]);
+      }
+      show3DNotice(data.clipOverhangWarnings.join('；'));
+      setStatus('已跳过 3D 生成：' + data.clipOverhangWarnings.join('；'), 'err');
+      setBtnState('idle');
+    } else {
+      hide3DNotice();
+    }
+  } catch (e) {
+    show2DCenterError(isClosureError(e.message)
+      ? '图形无法闭合：当前边长与角度组合构造不出封闭图形，请调整边长或角度。'
+      : '2D 生成失败：' + e.message);
+  }
+}
+function show2DCenterError(msg){ const el = $('cv2dError'); if (el) { el.textContent = msg; el.classList.add('show'); } }
+function hide2DCenterError(){ const el = $('cv2dError'); if (el) el.classList.remove('show'); }
+function isClosureError(msg){ return typeof msg === 'string' && msg.includes('无法构造'); }
+function renderSolutionButtons(count, index){
+  const box = $('solutionBox');
+  if (box === null) return;
+  if (count <= 1) { box.innerHTML = ''; return; }
+  box.innerHTML = Array.from({length: count}, (_, i) =>
+    `<button class="solution-btn${i === index ? ' active' : ''}" onclick="selectSolution(${i})">解 ${i + 1}</button>`
+  ).join('');
+}
+function selectSolution(idx){ state.freeSolution = idx; updateFileName(); schedulePreview(); }
+
+// ============================================================
+// 快速参数（开发者通道，逻辑不变）
+// ============================================================
+function applyQuickParams(){
+  const raw = $('quickParams').value.trim();
+  if (raw === '') { show2DCenterError('请先粘贴参数'); return; }
+  try {
+    state.preset = null;
+    if (raw.startsWith('{')) applyQuickObject(JSON.parse(raw));
+    else applyQuickText(raw);
+    hide2DCenterError();
+    renderAll();
+    send2DPreview();
+    clearTimeout(timer3d);
+    timer3d = setTimeout(() => send3DPreview(), 1000);
+  } catch (e) {
+    show2DCenterError('快速参数解析失败：' + e.message);
+  }
+}
+function applyQuickObject(obj){
+  if (obj.freeSideLengths) {
+    const lens = obj.freeSideLengths.map(v => parseFloat(v));
+    state.n = lens.length;
+    state.regular = false;
+    state.freeLens = lens;
+    state.freeAngles = (obj.freeAngles || []).map(v => parseFloat(v));
+    state.freeSolution = parseInt(obj.freeSolution || 0, 10);
+    state.arcs = {};
+    Object.keys(obj.freeArcs || {}).forEach(k => {
+      const i = parseInt(k, 10);
+      const a = obj.freeArcs[k];
+      state.arcs[i] = { radius: parseFloat(a.radius), direction: a.direction === 'in' ? 'in' : 'out' };
+    });
+  } else if (obj.sides) {
+    state.n = parseInt(obj.sides, 10);
+    state.regular = true;
+    state.sideLen = parseFloat(obj.sideLen || 40);
+  }
+  if (typeof obj.hollow === 'boolean') $('hollowMode').checked = obj.hollow;
+}
+function applyQuickText(raw){
+  const segs = raw.split(/[；;]/).map(s => s.trim()).filter(Boolean);
+  const edgeText = segs[0] || '';
+  const lens = [];
+  const arcs = {};
+  const re = /(\d+(?:\.\d+)?)\s*(?:（([凸凹])弧，R([\d.]+)[^）]*）)?/g;
+  let m;
+  while ((m = re.exec(edgeText)) !== null) {
+    const idx = lens.length;
+    lens.push(parseFloat(m[1]));
+    if (m[2]) arcs[idx] = { radius: parseFloat(m[3]), direction: m[2] === '凹' ? 'in' : 'out' };
+  }
+  if (lens.length < 3) throw new Error('至少需要 3 条边');
+  const angSeg = segs.find(s => s.includes('角'));
+  const angs = [];
+  if (angSeg) {
+    const ar = /\d+(?:\.\d+)?(?=°)/g;
+    let am;
+    while ((am = ar.exec(angSeg)) !== null) angs.push(parseFloat(am[0]));
+  }
+  const solSeg = segs.find(s => s.includes('解'));
+  let sol = 0;
+  if (solSeg) {
+    const sm = /解\s*(\d+)/.exec(solSeg);
+    if (sm) sol = Math.max(0, parseInt(sm[1], 10) - 1);
+  }
+  state.n = lens.length;
+  state.regular = false;
+  state.freeLens = lens;
+  state.freeAngles = angs;
+  state.freeSolution = sol;
+  state.arcs = arcs;
+}
+function copyCaseText(){
+  const el = $('caseText');
+  const text = el ? el.textContent : '';
+  if (text) navigator.clipboard.writeText(text).catch(() => {});
+}
+
+// ============================================================
+// 状态行 / 按钮四态
+// ============================================================
+function setStatus(msg, kind){
+  const el = $('statusLine');
+  if (!el) return;
+  el.textContent = msg;
+  el.className = 'status-line show' + (kind ? ' ' + kind : '');
+}
+function updateCostInfo(volume){
+  // 物料成本估算：体积(mm³) × PETG 密度 → 重量(g)；重量 × 单价 → 物料价(元)
+  // 附加"实际打印重量"估算：2 壁(0.8mm) + 顶底 3 层(1.2mm) + 内部 15% 填充，
+  // 由 2D 轮廓的净面积 A 与总周长 P 近似：V_print ≈ A×1.2 + A×0.15×1.8 + P×0.8×3
+  const el = $('sizeInfo');
+  if (!el) return;
+  if (typeof volume === 'number' && isFinite(volume) && volume > 0) {
+    let pg = null;
+    if (!$('hollowMode').checked) pg = estimatePrintWeightG();
+    if (pg === null || pg <= 0) {
+      // 镂空件（或暂无 2D 轮廓数据）：回退按实心体积估算
+      pg = volume * PETG_DENSITY_GCM3 / 1000;
+    }
+    pg *= 0.9;  // 打印实际体积按 0.9 倍估算（流率/收缩修正）
+    const pPrice = pg / 1000 * FILAMENT_PRICE_CNY_PER_KG;
+    el.innerHTML = `打印约 <b>${pg.toFixed(1)}</b> g · 物料成本约 <b>${pPrice.toFixed(2)}</b> 元`;
+  } else {
+    el.innerHTML = '打印约 — g · 物料成本约 — 元';
+  }
+}
+function estimatePrintWeightG(){
+  // 2 壁 0.8mm + 顶底 5 层共 1mm + 内部 15% 填充（近似切片估算）
+  if (!last2D || !Array.isArray(last2D.p0)) return null;
+  const T = 3.0, WALL = 0.8, SHELL = 1.0, INFILL = 0.15;
+  let area = 0, peri = 0;
+  const poly = (loop, signed) => {
+    let a = 0, p = 0;
+    for (let i = 0; i < loop.length; i++) {
+      const [x1, y1] = loop[i];
+      const [x2, y2] = loop[(i + 1) % loop.length];
+      a += signed * (x1 * y2 - x2 * y1);
+      p += Math.hypot(x2 - x1, y2 - y1);
+    }
+    return [Math.abs(a) / 2, p];
+  };
+  // 外轮廓：各边折线按边序拼接
+  const outer = [];
+  last2D.p0.forEach((edge, i) => {
+    edge.forEach((pt, j) => { if (j === 0 && i > 0) return; outer.push(pt); });
+  });
+  if (outer.length < 3) return null;
+  const [aOut, pOut] = poly(outer, 1);
+  area += aOut; peri += pOut;
+  (last2D.p2 || []).forEach(loop => {
+    if (loop.length < 3) return;
+    const [aIn, pIn] = poly(loop, -1);
+    area += aIn; peri += pIn;
+  });
+  if (area <= 0) return null;
+  const vPrint = area * SHELL + area * INFILL * (T - SHELL) + peri * WALL * T;
+  return vPrint * PETG_DENSITY_GCM3 / 1000;
+}
+function maskCostInfo(){
+  // 3D 生成期间遮蔽旧数值，避免显示上一次结果
+  const el = $('sizeInfo');
+  if (el) el.innerHTML = '打印约 <b>**</b> g · 物料成本约 <b>**</b> 元';
+}
+let btnState = 'idle';
+function setBtnState(s){
+  btnState = s;
+  const b = $('btnDownload');
+  if (!b) return;
+  if (s === 'generating') { b.disabled = true; b.textContent = '3D 生成中…'; b.className = 'btn primary'; }
+  else if (s === 'downloading') { b.disabled = true; b.textContent = '下载中…'; b.className = 'btn primary'; }
+  else if (s === 'done') { b.disabled = false; b.textContent = '已下载 ✓'; b.className = 'btn primary ok';
+    setTimeout(() => { if (btnState === 'done') setBtnState('ready'); }, 2000); }
+  else if (s === 'ready') { b.disabled = false; b.textContent = '下载3D模型'; b.className = 'btn primary'; }
+  else { b.disabled = true; b.textContent = '下载3D模型'; b.className = 'btn primary'; }
+}
+
+function show3DLoading(){ const el = $('cv3dLoading'); if (el) el.classList.add('show'); }
+function hide3DLoading(){ const el = $('cv3dLoading'); if (el) el.classList.remove('show'); }
+function show3DNotice(msg){ const el = $('cv3dNotice'); if (el) { el.textContent = msg; el.classList.add('show'); } }
+function hide3DNotice(){ const el = $('cv3dNotice'); if (el) el.classList.remove('show'); }
+
+async function send3DPreview(){
+  if (state.skip3D) return;
+  hide3DNotice();
+  const seq = ++previewSeq;
+  if (scene && meshGroup) {
+    while (meshGroup.children.length) meshGroup.remove(meshGroup.children[0]);
+  }
+  show3DLoading();
+  setBtnState('generating');
+  maskCostInfo();   // 生成期间遮蔽旧数值
+  try {
+    const resp = await fetch('/api/preview', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(currentParams())
+    });
+    const data = await resp.json();
+    if (resp.ok === false) throw new Error(data.error || ('HTTP ' + resp.status));
+    if (seq !== previewSeq) return;
+    hide3DLoading();
+    latestResult = data;
+    const m = data.meta;
+    updateCostInfo(m && m.volume);   // 物料成本估算（PETG）
+    try {
+      draw3D(data.preview);
+    } catch (renderErr) {
+      // WebGL 不可用等渲染失败：模型本身已生成，仍允许下载
+      setStatus('模型已生成；3D 预览渲染失败（' + renderErr.message + '），仍可下载 STL', 'err');
+      setBtnState('ready');
+      return;
+    }
+    const lines = [
+      `isValid=${m.isValid}  solidCount=${m.solidCount}  connected=${m.connected}`,
+      `卡扣: 已连接 ${m.fusedClipCount}/${m.clipCount}`,
+      `分离卡扣边: ${m.detachedClipEdges.length ? m.detachedClipEdges.join(',') : '无'}`,
+      `缺卡扣边: ${m.missingClipEdges.length ? m.missingClipEdges.join(',') : '无'}`,
+      `faces=${m.faceCount}  volume=${m.volume} mm³`,
+      `P1 顶点 ${m.p1CornerR ?? 0.05}mm 圆角: ${m.p1CornerApplied ?? 0} 处`,
+      `包边: ${m.wrapApplied ?? 0} 段  sweepCount=${m.sweepCount}`,
+      `P1 闭合线 ${data.p1.length} 条 · P2 闭合线 ${data.p2.length} 条`
+    ];
+    if (m.p1CornerWarnings && m.p1CornerWarnings.length) lines.push('P1 圆角跳过: ' + m.p1CornerWarnings.join('; '));
+    if (m.wrapSkippedCorners && m.wrapSkippedCorners.length) lines.push('包边不铺(极端角): ' + m.wrapSkippedCorners.map(i => '角' + (i + 1)).join(','));
+    if (m.wrapDegenerateCases && m.wrapDegenerateCases.length) lines.push('包边碰扣跳过用例: ' + m.wrapDegenerateCases.join(' | '));
+    if (m.clipOverhangWarnings && m.clipOverhangWarnings.length) lines.push(m.clipOverhangWarnings.join('; '));
+    if (m.wrapFailedCorners && m.wrapFailedCorners.length) lines.push('包边扫掠失败: ' + m.wrapFailedCorners.map(i => '角' + (i + 1)).join(','));
+    if (m.referenceErrors && m.referenceErrors.length) lines.push('参考线: ' + m.referenceErrors.join('; '));
+    if (m.p2FilletFailedVertices && m.p2FilletFailedVertices.length) lines.push('P2 尖角圆角失败: ' + m.p2FilletFailedVertices.length + ' 处');
+    if (m.holeChamferFailed && m.holeChamferFailed.length) lines.push('内孔倒角失败: ' + m.holeChamferFailed.join(','));
+    if (m.holeFilletFailed && m.holeFilletFailed.length) lines.push('内孔圆角失败: ' + m.holeFilletFailed.join(','));
+    console.log('[技术细节]', lines.join('\n'));
+    const okAll = m.isValid && m.missingClipEdges.length === 0;
+    if (!okAll) setStatus('3D 生成完成，但有警告（见技术细节）', 'err');
+    setBtnState('ready');
+  } catch (e) {
+    if (seq !== previewSeq) return;
+    hide3DLoading();
+    latestResult = null;
+    setStatus('3D 生成失败：' + e.message, 'err');
+    setBtnState('idle');
+    // 错误提示统一在画布上标注（不再写入左侧参数栏）：
+    // 闭合失败 → 2D 画布已由 2D 预览标注；其他错误 → 3D 画布中央提示。
+    if (isClosureError(e.message)) {
+      show2DCenterError('图形无法闭合：当前边长与角度组合构造不出封闭图形，请调整边长或角度。');
+    } else {
+      show3DNotice('3D 生成失败：' + e.message);
+    }
+  }
+}
+
+// ============================================================
+// 2D 画布
+// ============================================================
+function draw2D(data){
+  const cv = $('cv2d');
+  const dpr = window.devicePixelRatio || 1;
+  const w = cv.clientWidth, h = cv.clientHeight;
+  cv.width = Math.max(1, w * dpr); cv.height = Math.max(1, h * dpr);
+  const ctx = cv.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+
+  const pts = [];
+  const addPts = arr => arr.forEach(p => pts.push(p));
+  data.p0.forEach(addPts);
+  data.p1.forEach(addPts);
+  data.p2.forEach(addPts);
+  ((data.meta && data.meta.clipOrigins) || data.clipOrigins || []).forEach(p => pts.push([p[0], p[1]]));
+  if (!pts.length) return;
+
+  let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+  pts.forEach(([x, y]) => { minX = Math.min(minX,x); maxX = Math.max(maxX,x); minY = Math.min(minY,y); maxY = Math.max(maxY,y); });
+  const pad = 36;
+  const scale = Math.min((w - pad*2) / Math.max(1, maxX - minX), (h - pad*2) / Math.max(1, maxY - minY));
+  const ox = (w - (maxX - minX) * scale) / 2, oy = (h - (maxY - minY) * scale) / 2;
+  const X = x => ox + (x - minX) * scale;
+  const Y = y => oy + (maxY - y) * scale;
+
+  function drawLoop(loop, color, dash, closePath){
+    if (!loop || loop.length < 2) return;
+    ctx.save();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = dash ? 1.4 : 2.2;
+    ctx.setLineDash(dash || []);
+    ctx.beginPath();
+    loop.forEach((p, i) => { if (i === 0) ctx.moveTo(X(p[0]), Y(p[1])); else ctx.lineTo(X(p[0]), Y(p[1])); });
+    if (closePath) ctx.closePath();
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  data.p1.forEach(loop => drawLoop(loop, '#3d7db8', [6,4], true));
+  data.p2.forEach(loop => drawLoop(loop, '#2e9b6b', [2,5], true));
+  data.p0.forEach(edge => drawLoop(edge, '#1f2a3d', null, false));
+
+  ctx.fillStyle = '#1f2a3d';
+  ctx.font = 'bold 11px "PingFang SC", "Microsoft YaHei", sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'bottom';
+  data.p0.forEach((edge, i) => {
+    if (edge.length === 0) return;
+    const p = edge[0];
+    ctx.fillText(String(i + 1), X(p[0]), Y(p[1]) - 6);
+  });
+
+  // 卡扣位置：短直线（位置沿用 clipOrigins 圆点方案；朝向=该点切线方向；
+  // 长度用数据坐标，随图形同比例缩放）
+  ctx.strokeStyle = '#d64545';
+  ctx.lineWidth = 2.5;
+  ctx.lineCap = 'round';
+  const tickMM = 8;
+  const origins = (data.meta && data.meta.clipOrigins) || data.clipOrigins || [];
+  origins.forEach((p, i) => {
+    const edge = data.p0[i];
+    if (!edge || edge.length < 2) return;
+    // 折线上离 origin 最近的段，其方向即切线方向
+    let best = -1, bestD = Infinity;
+    for (let k = 0; k + 1 < edge.length; k++) {
+      const ax = edge[k][0] - p[0], ay = edge[k][1] - p[1];
+      const ex = edge[k + 1][0] - edge[k][0], ey = edge[k + 1][1] - edge[k][1];
+      const el2 = ex * ex + ey * ey;
+      const t = el2 > 1e-12 ? Math.max(0, Math.min(1, -(ax * ex + ay * ey) / el2)) : 0;
+      const nx = ax + ex * t, ny = ay + ey * t;
+      const d = nx * nx + ny * ny;
+      if (d < bestD) { bestD = d; best = k; }
+    }
+    if (best < 0) return;
+    const dx = edge[best + 1][0] - edge[best][0];
+    const dy = edge[best + 1][1] - edge[best][1];
+    const L = Math.hypot(dx, dy);
+    if (L < 1e-9) return;
+    ctx.beginPath();
+    ctx.moveTo(X(p[0] - dx * tickMM / L / 2), Y(p[1] - dy * tickMM / L / 2));
+    ctx.lineTo(X(p[0] + dx * tickMM / L / 2), Y(p[1] + dy * tickMM / L / 2));
+    ctx.stroke();
+  });
+}
+
+// ============================================================
+// 3D 画布（整模取景 + 两片装配预览）
+// ============================================================
+const cv3d = $('cv3d');
+let scene, camera, renderer, controls, meshGroup;
+function init3D(){
+  scene = new THREE.Scene();
+  scene.background = new THREE.Color(0xf4f7fb);
+  camera = new THREE.PerspectiveCamera(45, 1, 0.1, 4000);
+  camera.position.set(70, 45, 90);
+  renderer = new THREE.WebGLRenderer({canvas: cv3d, antialias: true});
+  controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  scene.add(new THREE.AmbientLight(0xffffff, 0.9));
+  const d = new THREE.DirectionalLight(0xffffff, 1.15);
+  d.position.set(80, 120, 60);
+  scene.add(d);
+  const d2 = new THREE.DirectionalLight(0xffffff, 0.4);
+  d2.position.set(-70, -40, -80);
+  scene.add(d2);
+  meshGroup = new THREE.Group();
+  scene.add(meshGroup);
+  window.__threeObj = {scene, camera, renderer, controls, meshGroup};
+  animate3D();
+}
+function mateTransform(){
+  // 两片装配：绕第 1 条边上卡扣在 P0 的位置旋转 180°
+  // 直线边 → 边中点（端点均值）；弧边 → 弧中点（P0 折线的中位点），
+  // 不能用弦的中点，否则凸/凹弧装配位置不对。
+  if (!last2D || !last2D.p0 || !last2D.p0[0] || last2D.p0[0].length < 2) return null;
+  const pts = last2D.p0[0];
+  let mid;
+  if (pts.length === 2) {
+    mid = [(pts[0][0] + pts[1][0]) / 2, (pts[0][1] + pts[1][1]) / 2];
+  } else {
+    const m = pts[Math.floor(pts.length / 2)];
+    mid = [m[0], m[1]];
+  }
+  return { x: mid[0] * 2, y: mid[1] * 2 };  // 2*mid
+}
+function frameCamera(){
+  if (!scene || !camera || !controls) return;
+  const box = new THREE.Box3().setFromObject(meshGroup);
+  if (box.isEmpty()) return;
+  const sphere = box.getBoundingSphere(new THREE.Sphere());
+  const r = Math.max(sphere.radius, 1);
+  camera.position.copy(sphere.center).add(new THREE.Vector3(r*1.35, r*0.85, r*1.75));
+  camera.near = r / 200; camera.far = r * 40;
+  camera.lookAt(sphere.center);
+  controls.target.copy(sphere.center);
+  controls.update();
+}
+function draw3D(preview){
+  if (!scene) init3D();
+  while (meshGroup.children.length) meshGroup.remove(meshGroup.children[0]);
+  const geo = new THREE.BufferGeometry();
+  const verts = preview.vertices.flat();
+  const faces = preview.faces.flat();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+  geo.setIndex(faces);
+  geo.computeVertexNormals();
+  const mat = new THREE.MeshStandardMaterial({color: 0x7fa9d4, roughness: 0.42, metalness: 0.06, side: THREE.DoubleSide});
+  const matMate = new THREE.MeshStandardMaterial({color: 0xd3e6f7, roughness: 0.4, metalness: 0.05, side: THREE.DoubleSide, transparent: true, opacity: 0.55});
+  const main = new THREE.Mesh(geo, mat);
+  meshGroup.add(main);
+  // 装配预览（固定沿第 1 条边；第二片半透明异色）
+  const mt = mateTransform();
+  if (mt) {
+    const mate = new THREE.Mesh(geo, matMate);
+    mate.rotation.z = Math.PI;
+    mate.position.set(mt.x, mt.y, 0);
+    mate.visible = $('mateToggle').checked;
+    meshGroup.add(mate);
+  }
+  frameCamera();
+}
+function mateChanged(){
+  const on = $('mateToggle').checked;
+  if (meshGroup) {
+    meshGroup.children.forEach((c, i) => { if (i > 0) c.visible = on; });
+  }
+  frameCamera();
+}
+function animate3D(){
+  requestAnimationFrame(animate3D);
+  if (controls) controls.update();
+  if (renderer) {
+    const w = cv3d.clientWidth, h = cv3d.clientHeight;
+    const dpr = window.devicePixelRatio || 1;
+    if (cv3d.width !== Math.floor(w*dpr) || cv3d.height !== Math.floor(h*dpr)) {
+      renderer.setPixelRatio(dpr);
+      renderer.setSize(w, h, false);
+      camera.aspect = w / Math.max(1, h);
+      camera.updateProjectionMatrix();
+    }
+    renderer.render(scene, camera);
+  }
+}
+
+// ============================================================
+// 下载 STL
+// ============================================================
+async function downloadSTL(){
+  if (!latestResult) return;
+  setBtnState('downloading');
+  try {
+    const resp = await fetch('/api/generate', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(currentParams())
+    });
+    if (!resp.ok) {
+      const data = await resp.json().catch(() => ({}));
+      throw new Error(data.error || ('HTTP ' + resp.status));
+    }
+    const blob = await resp.blob();
+    let name = buildStlName();
+    const cd = resp.headers.get('Content-Disposition') || '';
+    const mStar = cd.match(/filename\*=UTF-8''([^;]+)/i);
+    if (mStar) {
+      try { name = decodeURIComponent(mStar[1]); } catch (e) {}
+    } else {
+      const m = cd.match(/filename="([^"]+)"/);
+      if (m) name = m[1];
+    }
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    a.click();
+    URL.revokeObjectURL(a.href);
+    setBtnState('done');
+    setStatus('已下载 ' + name, 'ok');
+  } catch (e) {
+    setStatus('下载失败：' + e.message, 'err');
+    setBtnState('ready');
+  }
+}
+
+// ============================================================
+// 启动：默认 正方形（4×40mm）
+// ============================================================
+selectPreset('quad', 'sq-1111');
+</script>
+</body>
+</html>

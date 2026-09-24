@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# 本地配置 / 密钥
+.env
+*.local
+
+# 系统
+.DS_Store
+Thumbs.db
+
+# 生成物
+*.stl
+*.3mf
+*.gcode
+output/
+V3输出/
+V2输出/
+
+# 备份（历史版本快照不入库）
+backup_*/
