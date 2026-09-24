@@ -50,7 +50,25 @@ jobs:
             sleep 2
           done
           curl -sf http://127.0.0.1:8768/api/health
-          curl -sf -X POST http://127.0.0.1:8768/api/preview2d \
-            -H 'Content-Type: application/json' -d '{"sides":4,"sideLen":40}' \
-            -o /dev/null -w "preview2d HTTP %{http_code}\n"
-          kill $SERVER_PID
+
+          # 首次请求会触发构建 worker 子进程冷启动（需 import build123d 并
+          # 加载约 280MB 的 OCCT）。CI 共享 vCPU 远慢于开发机，冷启动可能
+          # 超过内置的 60s 看门狗而返回 504，此时看门狗会杀掉并重启 worker。
+          # 因此最多重试 5 次，任一成功即视为通过——本步骤验证的是
+          # "接口可用"，而非 "冷启动速度"。
+          echo "冒烟测试 preview2d（含 worker 冷启动，最多重试 5 次）..."
+          ok=0
+          for attempt in $(seq 1 5); do
+            code=$(curl -s --max-time 180 -X POST http://127.0.0.1:8768/api/preview2d \
+              -H 'Content-Type: application/json' -d '{"sides":4,"sideLen":40}' \
+              -o /dev/null -w '%{http_code}' || echo 000)
+            echo "  第 $attempt 次: HTTP $code"
+            if [ "$code" = "200" ]; then ok=1; break; fi
+            sleep 5
+          done
+          kill $SERVER_PID 2>/dev/null || true
+          if [ "$ok" != "1" ]; then
+            echo "::error::preview2d 冒烟测试 5 次均未返回 200"
+            exit 1
+          fi
+          echo "✅ preview2d 冒烟测试通过"
