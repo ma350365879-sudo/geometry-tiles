@@ -174,10 +174,18 @@ def _start_build_workers():
     import multiprocessing as mp
     if _worker_state:
         return
+    # 必须用 spawn 上下文的 Queue，与 _spawn_worker 中的
+    # mp.get_context("spawn") 保持一致。
+    #
+    # 若此处用默认上下文（mp.Queue()），在 Linux 上默认是 fork，就会把
+    # fork 语义的 Queue 交给 spawn 子进程，二者底层机制不兼容：子进程能
+    # 启动、也能收到任务，但结果无法送达父进程，表现为 _submit_build 等到
+    # 超时（本地 macOS 默认即 spawn，因此不会复现）。
+    ctx = mp.get_context("spawn")
     for kind, worker in (("2d", _worker_2d), ("3d", _worker_3d)):
         st = {
-            "q_in": mp.Queue(),
-            "q_out": mp.Queue(),
+            "q_in": ctx.Queue(),
+            "q_out": ctx.Queue(),
             "proc": None,
             "gen": 0,
             "lock": threading.Lock(),
